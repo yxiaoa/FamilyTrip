@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>行迹 · 家庭旅行排程器</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand"><span class="brand-mark">✦</span><span>行迹</span></div>
+        <p class="eyebrow">FAMILY TRIP PLANNER</p>
+        <nav>
+          <button class="nav-item active"><span>▦</span> 行程总览</button>
+          <button class="nav-item"><span>♧</span> 家庭成员</button>
+          <button class="nav-item"><span>¥</span> 费用中心</button>
+          <button class="nav-item"><span>⌁</span> 地图路线</button>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="sync-card"><span class="status-dot"></span><div><strong>已自动保存</strong><small>刚刚同步</small></div></div>
+          <button class="settings">⚙ 设置</button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div><span class="crumb">我的旅行 / </span><strong>京都慢游 · 春日家庭行</strong></div>
+          <div class="top-actions"><span class="save-state">● 所有更改已保存</span><button class="avatar">林</button></div>
+        </header>
+
+        <section class="page-heading">
+          <div>
+            <div class="heading-row"><h1>京都慢游 · 春日家庭行</h1><span class="badge">进行中</span></div>
+            <p>2026年4月3日 — 4月7日 <span class="muted-separator">·</span> 5天4晚 <span class="muted-separator">·</span> 日本京都</p>
+          </div>
+          <div class="heading-actions"><button class="button secondary" id="exportExcel">↓ 导出 Excel</button><button class="button primary" id="printPdf">▣ 打印 / PDF</button></div>
+        </section>
+
+        <section class="summary-grid">
+          <div class="summary-card"><div class="summary-icon coral">♧</div><div><span>同行人员</span><strong id="memberCount">4 人</strong><small id="memberHint">2 位成人 · 2 位儿童</small></div></div>
+          <div class="summary-card"><div class="summary-icon blue">⌁</div><div><span>总路程</span><strong>42.8 km</strong><small>预计车程 2小时18分</small></div></div>
+          <div class="summary-card"><div class="summary-icon green">¥</div><div><span>预计总花费</span><strong id="totalCost">¥ 18,460</strong><small>人均 ¥ <span id="perPerson">4,615</span></small></div></div>
+          <div class="summary-card"><div class="summary-icon purple">◷</div><div><span>行程完成度</span><strong>35%</strong><div class="progress"><i></i></div></div></div>
+        </section>
+
+        <section class="workspace">
+          <div class="itinerary-panel">
+            <div class="section-heading"><div><h2>行程安排</h2><span class="section-note">调整任一时段，后续安排将自动顺延</span></div><button class="button add-button" id="addActivity">＋ 添加安排</button></div>
+            <div class="days-tabs"><button class="day-tab active">D1 <small>4月3日 · 周五</small></button><button class="day-tab">D2 <small>4月4日 · 周六</small></button><button class="day-tab">D3 <small>4月5日 · 周日</small></button><button class="day-tab">D4 <small>4月6日 · 周一</small></button><button class="day-tab">D5 <small>4月7日 · 周二</small></button></div>
+            <div class="day-title"><div><span class="day-label">DAY 1</span><h3>抵达京都 · 古都初见</h3></div><span class="weather">☀ 18° / 9°　晴</span></div>
+            <div id="timeline" class="timeline"></div>
+            <div class="timeline-tip">✦ <span>拖动时间或修改时长，后续安排会自动重新计算</span></div>
+          </div>
+
+          <aside class="right-column">
+            <div class="map-card"><div class="card-heading"><h3>今日路线</h3><button class="link-button" id="openMap">在地图中打开 ↗</button></div><div class="map-visual"><div class="map-grid"></div><svg viewBox="0 0 320 150" preserveAspectRatio="none"><path class="route-line" d="M25 119 C82 92, 77 42, 142 55 S200 118, 288 27"></path><circle cx="25" cy="119" r="7" class="route-point start"></circle><circle cx="142" cy="55" r="7" class="route-point"></circle><circle cx="288" cy="27" r="7" class="route-point end"></circle></svg><span class="map-label label-a">京都站</span><span class="map-label label-b">锦市场</span><span class="map-label label-c">清水寺</span></div><div class="route-summary"><span>⌁ 3 个地点</span><span>↗ 12.4 km</span><span>◷ 48 分钟</span></div></div>
+            <div class="members-card"><div class="card-heading"><h3>同行家庭</h3><button class="link-button" id="manageMembers">管理</button></div><div class="member-list" id="memberList"><div class="member-row"><span class="member-avatar orange">林</span><div><strong>林先生</strong><small>成人 · 主要联系人</small></div><span class="check">✓</span></div><div class="member-row"><span class="member-avatar blue-bg">林</span><div><strong>林太太</strong><small>成人</small></div><span class="check">✓</span></div><div class="member-row"><span class="member-avatar yellow">林</span><div><strong>小林</strong><small>儿童 · 8岁</small></div><span class="check">✓</span></div><div class="member-row"><span class="member-avatar pink">林</span><div><strong>小小林</strong><small>儿童 · 5岁</small></div><span class="check">✓</span></div></div><button class="invite-button" id="addMember">＋ 添加家庭成员</button></div>
+            <div class="notice-card"><span class="notice-icon">↗</span><div><strong>人数变化会自动重算</strong><p>房间、车辆与门票费用将随家庭成员变化自动更新。</p></div></div>
+          </aside>
+        </section>
+      </main>
+    </div>
+    <div class="toast" id="toast"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
