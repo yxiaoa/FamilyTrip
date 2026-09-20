@@ -47,8 +47,8 @@
         <section class="workspace">
           <div class="itinerary-panel">
             <div class="section-heading"><div><h2>行程安排</h2><span class="section-note">调整任一时段，后续安排将自动顺延</span></div><button class="button add-button" id="addActivity">＋ 添加安排</button></div>
-            <div class="days-tabs"><button class="day-tab active">D1 <small>4月3日 · 周五</small></button><button class="day-tab">D2 <small>4月4日 · 周六</small></button><button class="day-tab">D3 <small>4月5日 · 周日</small></button><button class="day-tab">D4 <small>4月6日 · 周一</small></button><button class="day-tab">D5 <small>4月7日 · 周二</small></button></div>
-            <div class="day-title"><div><span class="day-label">DAY 1</span><h3>抵达京都 · 古都初见</h3></div><span class="weather">☀ 18° / 9°　晴</span></div>
+            <div class="days-tabs"><button class="day-tab active" data-day="0">D1 <small>4月3日 · 周五</small></button><button class="day-tab" data-day="1">D2 <small>4月4日 · 周六</small></button><button class="day-tab" data-day="2">D3 <small>4月5日 · 周日</small></button><button class="day-tab" data-day="3">D4 <small>4月6日 · 周一</small></button><button class="day-tab" data-day="4">D5 <small>4月7日 · 周二</small></button></div>
+            <div class="day-title"><div><span class="day-label" id="dayLabel">DAY 1</span><h3 id="dayTitle">抵达京都 · 古都初见</h3></div><label class="day-start">开始时间 <input id="dayStartTime" type="time" value="09:30"></label><span class="weather">☀ 18° / 9°　晴</span></div>
             <div id="timeline" class="timeline"></div>
             <div class="timeline-tip">✦ <span>拖动时间或修改时长，后续安排会自动重新计算</span></div>
           </div>
@@ -61,6 +61,15 @@
         </section>
       </main>
     </div>
+    <dialog id="activityDialog" class="activity-dialog">
+      <form method="dialog" id="activityForm">
+        <div class="dialog-heading"><div><span class="day-label" id="dialogMode">新增安排</span><h2 id="dialogTitle">添加行程</h2></div><button class="close-dialog" value="cancel" aria-label="关闭">×</button></div>
+        <label>安排名称<input id="activityName" required maxlength="40" placeholder="例如：参观二条城"></label>
+        <label>详细说明<input id="activityDetail" maxlength="80" placeholder="地点、交通或备注"></label>
+        <div class="form-grid"><label>图标<input id="activityEmoji" maxlength="2" value="📍"></label><label>费用（¥）<input id="activityCost" type="number" min="0" step="1" value="0"></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="5" value="60"></label></div>
+        <div class="dialog-actions"><button class="button secondary" value="cancel">取消</button><button class="button primary" id="saveActivity" value="default">保存安排</button></div>
+      </form>
+    </dialog>
     <div class="toast" id="toast"></div>
     <script src="app.js"></script>
   </body>
