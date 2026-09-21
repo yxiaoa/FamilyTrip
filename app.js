@@ -43,7 +43,13 @@ function currentTrip() { return state.trips.find(trip => trip.id === state.activ
 function normalizeTrip(trip) {
   const days = Array.isArray(trip.days) && trip.days.length ? trip.days : [{ title: '第一天', startTime: '09:00', activities: [] }];
   const members = Number(trip.members) || 1;
-  return { ...trip, members, familyMembers: Array.isArray(trip.familyMembers) && trip.familyMembers.length ? trip.familyMembers : defaultFamilyMembers(members), days: days.map((day, index) => ({ ...day, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities : [] })) };
+  return { ...trip, members, familyMembers: Array.isArray(trip.familyMembers) && trip.familyMembers.length ? trip.familyMembers : defaultFamilyMembers(members), days: days.map((day, index) => ({ ...day, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities.map(normalizeActivity) : [] })) };
+}
+function normalizeActivity(activity) {
+  return { ...activity, category: activity.category || '其他', costMode: activity.costMode === 'perPerson' ? 'perPerson' : 'total', cost: Math.max(0, Number(activity.cost) || 0) };
+}
+function activityTotal(activity, members) {
+  return Number(activity.cost || 0) * (activity.costMode === 'perPerson' ? members : 1);
 }
 function formatDate(date) {
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', weekday: 'short' }).format(date);
@@ -75,7 +81,7 @@ function renderTimeline() {
     const start = current; current += Number(activity.duration);
     return `<div class="activity"><div class="time">${formatTime(start)}</div><span class="activity-dot"></span>
       <div class="activity-card" data-index="${index}"><div class="activity-main"><span class="activity-emoji">${escapeHtml(activity.emoji)}</span><div><h4>${escapeHtml(activity.title)}</h4><p>${escapeHtml(activity.detail || '暂无备注')}</p></div></div>
-      <div class="activity-meta"><strong>¥ ${Number(activity.cost).toLocaleString('zh-CN')}</strong><small>${activity.duration} 分钟</small></div>
+      <div class="activity-meta"><strong>¥ ${activityTotal(activity, trip.members).toLocaleString('zh-CN')}</strong><small>${escapeHtml(activity.category)} · ${activity.costMode === 'perPerson' ? '人均' : '总额'} · ${activity.duration} 分钟</small></div>
       <div class="activity-controls"><button data-action="up" title="上移">↑</button><button data-action="down" title="下移">↓</button><button data-action="edit" title="编辑">✎</button><button data-action="delete" title="删除">×</button></div></div></div>`;
   }).join('') : '<div class="empty-state">这一天还没有安排<br><button class="button add-button" data-empty-add>＋ 添加第一项安排</button></div>';
   document.querySelector('#dayLabel').textContent = `DAY ${selectedDay + 1}`;
@@ -105,8 +111,7 @@ function renderTabs() {
 }
 function updateCost() {
   const trip = currentTrip();
-  const activitiesCost = trip.days.reduce((total, day) => total + day.activities.reduce((sum, item) => sum + Number(item.cost), 0), 0);
-  const total = 7120 + activitiesCost + trip.members * 520;
+  const total = trip.days.reduce((sum, day) => sum + day.activities.reduce((daySum, item) => daySum + activityTotal(item, trip.members), 0), 0);
   $('#memberCount').textContent = `${trip.members} 人`;
   $('#memberHint').textContent = `${Math.max(1, trip.members - 2)} 位成人 · ${Math.min(2, trip.members)} 位儿童`;
   $('#totalCost').textContent = `¥ ${total.toLocaleString('zh-CN')}`;
@@ -128,18 +133,18 @@ function renderApp() {
 }
 function openEditor(index = -1) {
   editingIndex = index;
-  const activity = index >= 0 ? currentTrip().days[selectedDay].activities[index] : { title: '', detail: '', emoji: '📍', cost: 0, duration: 60 };
+  const activity = index >= 0 ? currentTrip().days[selectedDay].activities[index] : { title: '', detail: '', emoji: '📍', category: '其他', cost: 0, costMode: 'total', duration: 60 };
   $('#dialogMode').textContent = index >= 0 ? '编辑安排' : '新增安排';
   $('#dialogTitle').textContent = index >= 0 ? activity.title : '添加行程';
   $('#activityName').value = activity.title; $('#activityDetail').value = activity.detail;
-  $('#activityEmoji').value = activity.emoji; $('#activityCost').value = activity.cost; $('#activityDuration').value = activity.duration;
+  $('#activityEmoji').value = activity.emoji; $('#activityCategory').value = activity.category || '其他'; $('#activityCost').value = activity.cost; $('#activityCostMode').value = activity.costMode || 'total'; $('#activityDuration').value = activity.duration;
   dialog.showModal(); $('#activityName').focus();
 }
 form.addEventListener('submit', event => {
   event.preventDefault();
   const duration = Number($('#activityDuration').value);
   if (!Number.isInteger(duration) || duration < 10 || duration > 720) return showToast('时长需为 10 - 720 分钟的整数');
-  const activity = { title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), emoji: $('#activityEmoji').value.trim() || '📍', cost: Number($('#activityCost').value) || 0, duration };
+  const activity = normalizeActivity({ title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), emoji: $('#activityEmoji').value.trim() || '📍', category: $('#activityCategory').value, cost: Number($('#activityCost').value) || 0, costMode: $('#activityCostMode').value, duration });
   if (!activity.title) return showToast('请填写安排名称');
   if (editingIndex >= 0) currentTrip().days[selectedDay].activities[editingIndex] = { ...currentTrip().days[selectedDay].activities[editingIndex], ...activity };
   else { activity.time = currentTrip().days[selectedDay].startTime; currentTrip().days[selectedDay].activities.push(activity); }
@@ -152,15 +157,15 @@ function exportExcel() {
     return day.activities.map((a, i) => {
       const time = formatTime(current);
       current += Number(a.duration);
-      return `<tr><td>第${dayIndex + 1}天</td><td>${i + 1}</td><td>${time}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.detail)}</td><td>${a.duration}</td><td>${a.cost}</td></tr>`;
+      return `<tr><td>第${dayIndex + 1}天</td><td>${i + 1}</td><td>${time}</td><td>${escapeHtml(a.category)}</td><td>${a.costMode === 'perPerson' ? '人均' : '总额'}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.detail)}</td><td>${a.duration}</td><td>${activityTotal(a, trip.members)}</td></tr>`;
     });
   }).join('');
-  const table = `<table border="1"><tr><th>日期</th><th>序号</th><th>时间</th><th>安排</th><th>说明</th><th>时长（分钟）</th><th>费用（¥）</th></tr>${rows}</table>`;
+  const table = `<table border="1"><tr><th>日期</th><th>序号</th><th>时间</th><th>类别</th><th>计费方式</th><th>安排</th><th>说明</th><th>时长（分钟）</th><th>总费用（¥）</th></tr>${rows}</table>`;
   const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`\ufeff<html><meta charset="utf-8">${table}</html>`], { type: 'application/vnd.ms-excel' }));
   link.download = `${trip.name}-行程.xls`; link.click(); URL.revokeObjectURL(link.href); showToast('Excel 行程表已下载');
 }
 function expenseTotal(trip) {
-  return trip.days.reduce((total, day) => total + day.activities.reduce((sum, activity) => sum + Number(activity.cost || 0), 0), 0);
+  return trip.days.reduce((total, day) => total + day.activities.reduce((sum, activity) => sum + activityTotal(activity, trip.members), 0), 0);
 }
 function saveTripFile() {
   const trip = currentTrip();
@@ -173,7 +178,7 @@ function saveTripFile() {
       familyMembers: trip.familyMembers || defaultFamilyMembers(trip.members),
       expenseSummary: {
         activityTotal: expenseTotal(trip),
-        estimatedTotal: 7120 + expenseTotal(trip) + trip.members * 520,
+        estimatedTotal: expenseTotal(trip),
         currency: 'CNY'
       }
     }
