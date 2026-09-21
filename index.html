@@ -12,7 +12,8 @@
         <div class="brand"><span class="brand-mark">✦</span><span>行迹</span></div>
         <p class="eyebrow">FAMILY TRIP PLANNER</p>
         <nav>
-          <button class="nav-item active"><span>▦</span> 行程总览</button>
+          <button class="nav-item active" id="overviewNav"><span>▦</span> 行程总览</button>
+          <button class="nav-item new-trip-nav" id="newTripButton"><span>＋</span> 新建新行程</button>
           <button class="nav-item"><span>♧</span> 家庭成员</button>
           <button class="nav-item"><span>¥</span> 费用中心</button>
           <button class="nav-item"><span>⌁</span> 地图路线</button>
@@ -25,16 +26,16 @@
 
       <main class="main-content">
         <header class="topbar">
-          <div><span class="crumb">我的旅行 / </span><strong>京都慢游 · 春日家庭行</strong></div>
+          <div><span class="crumb">我的旅行 / </span><strong id="tripNameCrumb">京都慢游 · 春日家庭行</strong></div>
           <div class="top-actions"><span class="save-state">● 所有更改已保存</span><button class="avatar">林</button></div>
         </header>
 
         <section class="page-heading">
           <div>
-            <div class="heading-row"><h1>京都慢游 · 春日家庭行</h1><span class="badge">进行中</span></div>
-            <p>2026年4月3日 — 4月7日 <span class="muted-separator">·</span> 5天4晚 <span class="muted-separator">·</span> 日本京都</p>
+            <div class="heading-row"><h1 id="tripName">京都慢游 · 春日家庭行</h1><span class="badge">进行中</span></div>
+            <p id="tripMeta">2026年4月3日 — 4月7日 <span class="muted-separator">·</span> 5天4晚 <span class="muted-separator">·</span> 日本京都</p>
           </div>
-          <div class="heading-actions"><button class="button secondary" id="exportExcel">↓ 导出 Excel</button><button class="button primary" id="printPdf">▣ 打印 / PDF</button></div>
+          <div class="heading-actions"><button class="button secondary" id="openTripFile">↥ 打开行程</button><button class="button secondary" id="saveTripFile">↓ 保存行程</button><button class="button secondary" id="exportExcel">↓ 导出 Excel</button><button class="button primary" id="printPdf">▣ 打印 / PDF</button><input id="tripFileInput" type="file" accept=".json,.trip.json,application/json" hidden></div>
         </section>
 
         <section class="summary-grid">
@@ -47,7 +48,7 @@
         <section class="workspace">
           <div class="itinerary-panel">
             <div class="section-heading"><div><h2>行程安排</h2><span class="section-note">调整任一时段，后续安排将自动顺延</span></div><button class="button add-button" id="addActivity">＋ 添加安排</button></div>
-            <div class="days-tabs"><button class="day-tab active" data-day="0">D1 <small>4月3日 · 周五</small></button><button class="day-tab" data-day="1">D2 <small>4月4日 · 周六</small></button><button class="day-tab" data-day="2">D3 <small>4月5日 · 周日</small></button><button class="day-tab" data-day="3">D4 <small>4月6日 · 周一</small></button><button class="day-tab" data-day="4">D5 <small>4月7日 · 周二</small></button></div>
+            <div class="days-tabs" id="daysTabs"></div>
             <div class="day-title"><div><span class="day-label" id="dayLabel">DAY 1</span><h3 id="dayTitle">抵达京都 · 古都初见</h3></div><label class="day-start">开始时间 <input id="dayStartTime" type="time" value="09:30"></label><span class="weather">☀ 18° / 9°　晴</span></div>
             <div id="timeline" class="timeline"></div>
             <div class="timeline-tip">✦ <span>拖动时间或修改时长，后续安排会自动重新计算</span></div>
@@ -63,11 +64,20 @@
     </div>
     <dialog id="activityDialog" class="activity-dialog">
       <form method="dialog" id="activityForm">
-        <div class="dialog-heading"><div><span class="day-label" id="dialogMode">新增安排</span><h2 id="dialogTitle">添加行程</h2></div><button class="close-dialog" value="cancel" aria-label="关闭">×</button></div>
+        <div class="dialog-heading"><div><span class="day-label" id="dialogMode">新增安排</span><h2 id="dialogTitle">添加行程</h2></div><button class="close-dialog" type="button" id="closeActivityDialog" aria-label="关闭">×</button></div>
         <label>安排名称<input id="activityName" required maxlength="40" placeholder="例如：参观二条城"></label>
         <label>详细说明<input id="activityDetail" maxlength="80" placeholder="地点、交通或备注"></label>
         <div class="form-grid"><label>图标<input id="activityEmoji" maxlength="2" value="📍"></label><label>费用（¥）<input id="activityCost" type="number" min="0" step="1" value="0"></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="5" value="60"></label></div>
-        <div class="dialog-actions"><button class="button secondary" value="cancel">取消</button><button class="button primary" id="saveActivity" value="default">保存安排</button></div>
+        <div class="dialog-actions"><button class="button secondary" type="button" id="cancelActivityDialog">取消</button><button class="button primary" id="saveActivity" value="default">保存安排</button></div>
+      </form>
+    </dialog>
+    <dialog id="tripDialog" class="activity-dialog trip-dialog">
+      <form method="dialog" id="tripForm">
+        <div class="dialog-heading"><div><span class="day-label">新建旅行</span><h2>创建一份新的行程计划</h2></div><button class="close-dialog" type="button" id="closeTripDialog" aria-label="关闭">×</button></div>
+        <label>旅行名称<input id="newTripName" required maxlength="50" placeholder="例如：东京亲子夏日行"></label>
+        <label>目的地<input id="newTripDestination" required maxlength="30" placeholder="例如：日本东京"></label>
+        <div class="form-grid"><label>开始日期<input id="newTripStart" type="date" required></label><label>结束日期<input id="newTripEnd" type="date" required></label><label>同行人数<input id="newTripMembers" type="number" min="1" max="30" value="4" required></label></div>
+        <div class="dialog-actions"><button class="button secondary" type="button" id="cancelTripDialog">取消</button><button class="button primary" type="submit">创建行程</button></div>
       </form>
     </dialog>
     <div class="toast" id="toast"></div>
