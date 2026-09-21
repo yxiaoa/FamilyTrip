@@ -69,6 +69,18 @@ function timeToMinutes(value) {
   const [hours, minutes] = value.split(':').map(Number);
   return (hours * 60) + minutes;
 }
+function safeFilePart(value) {
+  return String(value || '').trim().replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '');
+}
+function tripFileName(trip) {
+  const date = String(trip.startDate || '').replace(/-/g, '');
+  const destination = safeFilePart(trip.destination) || '未命名地点';
+  const name = safeFilePart(trip.name);
+  return `${date}_${destination}${name ? `_${name}` : ''}.trip.json`;
+}
+function tripDisplayName(trip) {
+  return trip.name || trip.destination || '未命名行程';
+}
 function showToast(message) {
   toast.textContent = message; toast.classList.add('show');
   window.setTimeout(() => toast.classList.remove('show'), 2400);
@@ -120,8 +132,8 @@ function updateCost() {
 function renderTripHeader() {
   const trip = currentTrip();
   const range = dateRange(trip.startDate, trip.endDate);
-  $('#tripName').textContent = trip.name;
-  $('#tripNameCrumb').textContent = trip.name;
+  $('#tripName').textContent = tripDisplayName(trip);
+  $('#tripNameCrumb').textContent = tripDisplayName(trip);
   const startLabel = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' }).format(range.start);
   const endLabel = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' }).format(new Date(`${trip.endDate}T00:00:00`));
   $('#tripMeta').innerHTML = `${startLabel} — ${endLabel} <span class="muted-separator">·</span> ${range.days}天${Math.max(0, range.days - 1)}晚 <span class="muted-separator">·</span> ${escapeHtml(trip.destination)}`;
@@ -186,7 +198,7 @@ function saveTripFile() {
   const blob = new Blob([JSON.stringify(fileData, null, 2)], { type: 'application/json;charset=utf-8' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `${trip.name || '未命名行程'}.trip.json`;
+  link.download = tripFileName(trip);
   link.click();
   URL.revokeObjectURL(link.href);
   showToast('行程文件已保存，可下次继续打开修改');
@@ -250,7 +262,7 @@ tripForm.addEventListener('submit', event => {
   const startDate = $('#newTripStart').value;
   const endDate = $('#newTripEnd').value;
   const members = Number($('#newTripMembers').value);
-  if (!name || !destination || !startDate || !endDate || !Number.isInteger(members) || members < 1 || members > 30) return showToast('请完整填写旅行信息');
+  if (!destination || !startDate || !endDate || !Number.isInteger(members) || members < 1 || members > 30) return showToast('请填写目的地、日期和同行人数');
   const range = dateRange(startDate, endDate);
   if (range.days < 1 || range.days > 31) return showToast('旅行时长需为 1 到 31 天');
   const days = Array.from({ length: range.days }, (_, index) => ({ title: index === 0 ? `抵达 · ${destination}` : `第 ${index + 1} 天`, startTime: '09:00', activities: [] }));
