@@ -30,7 +30,7 @@
 
         <section class="page-heading">
           <div>
-            <div class="heading-row"><h1 id="tripName">京都慢游 · 春日家庭行</h1><span class="badge">进行中</span></div>
+            <div class="heading-row"><h1 id="tripName">京都慢游 · 春日家庭行</h1><span class="badge">进行中</span><button class="link-button edit-trip-button" id="editTripButton">编辑行程</button></div>
             <p id="tripMeta">2026年4月3日 — 4月7日 <span class="muted-separator">·</span> 5天4晚 <span class="muted-separator">·</span> 日本京都</p>
           </div>
           <div class="heading-actions"><button class="button secondary" id="openTripFile">↥ 打开行程</button><button class="button secondary" id="saveTripFile">↓ 保存行程</button><button class="button secondary" id="exportExcel">↓ 导出 Excel</button><button class="button primary" id="printPdf">▣ 打印 / PDF</button><input id="tripFileInput" type="file" accept=".json,.trip.json,application/json" hidden></div>
@@ -82,6 +82,16 @@
         <label>方案名称<input id="planName" required maxlength="30" placeholder="例如：雨天室内方案"></label>
         <p class="dialog-help">将复制当前主方案作为起点，之后可切换并继续编辑。</p>
         <div class="dialog-actions"><button class="button secondary" type="button" id="cancelPlanDialog">取消</button><button class="button primary" type="submit">添加备用方案</button></div>
+      </form>
+    </dialog>
+    <dialog id="editTripDialog" class="activity-dialog trip-dialog">
+      <form method="dialog" id="editTripForm">
+        <div class="dialog-heading"><div><span class="day-label">行程设置</span><h2>修改行程名称和天数</h2></div><button class="close-dialog" type="button" id="closeEditTripDialog" aria-label="关闭">×</button></div>
+        <label>行程名称（可选）<input id="editTripName" maxlength="50" placeholder="例如：古镇游"></label>
+        <div class="form-grid"><label>开始日期<input id="editTripStart" type="date" required></label><label>结束日期<input id="editTripEnd" type="date" required></label></div>
+        <p class="dialog-help" id="editTripDaysHint"></p>
+        <label id="editTripRemoveWarning" class="confirm-option" hidden><input id="editTripConfirmRemove" type="checkbox"> 我确认删除缩短天数后超出的行程安排和备用方案</label>
+        <div class="dialog-actions"><button class="button secondary" type="button" id="cancelEditTripDialog">取消</button><button class="button primary" type="submit">保存行程设置</button></div>
       </form>
     </dialog>
     <dialog id="tripDialog" class="activity-dialog trip-dialog">

@@ -33,6 +33,8 @@ const tripDialog = document.querySelector('#tripDialog');
 const tripForm = document.querySelector('#tripForm');
 const planDialog = document.querySelector('#planDialog');
 const planForm = document.querySelector('#planForm');
+const editTripDialog = document.querySelector('#editTripDialog');
+const editTripForm = document.querySelector('#editTripForm');
 const $ = selector => document.querySelector(selector);
 
 function persist() { localStorage.setItem(stateKey, JSON.stringify(state)); }
@@ -108,6 +110,28 @@ function dateRange(startDate, endDate) {
   const start = new Date(`${startDate}T00:00:00`);
   const end = new Date(`${endDate}T00:00:00`);
   return { start, days: Math.floor((end - start) / 86400000) + 1 };
+}
+function updateEditTripDaysHint() {
+  const startDate = $('#editTripStart').value;
+  const endDate = $('#editTripEnd').value;
+  if (!startDate || !endDate) return;
+  const range = dateRange(startDate, endDate);
+  const trip = currentTrip();
+  const removedDays = trip.days.slice(range.days);
+  const hasContent = removedDays.some(day => day.activities.length || day.alternatives.length);
+  $('#editTripDaysHint').textContent = range.days < 1 ? '结束日期不能早于开始日期' : `将显示 ${range.days} 天${hasContent ? '；缩短日期会移除超出范围的安排' : ''}`;
+  $('#editTripRemoveWarning').hidden = !(range.days < trip.days.length && hasContent);
+  if (!hasContent) $('#editTripConfirmRemove').checked = false;
+}
+function openEditTripDialog() {
+  const trip = currentTrip();
+  $('#editTripName').value = trip.name || '';
+  $('#editTripStart').value = trip.startDate;
+  $('#editTripEnd').value = trip.endDate;
+  $('#editTripConfirmRemove').checked = false;
+  updateEditTripDaysHint();
+  editTripDialog.showModal();
+  $('#editTripName').focus();
 }
 function formatTime(minutes) {
   return `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
@@ -373,7 +397,10 @@ document.querySelector('#newTripButton').addEventListener('click', () => {
   $('#newTripMembers').value = currentTrip().members;
   tripDialog.showModal(); $('#newTripName').focus();
 });
+document.querySelector('#editTripButton').addEventListener('click', openEditTripDialog);
+['editTripStart', 'editTripEnd'].forEach(id => document.querySelector(`#${id}`).addEventListener('change', updateEditTripDaysHint));
 ['closeTripDialog', 'cancelTripDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => tripDialog.close()));
+['closeEditTripDialog', 'cancelEditTripDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => editTripDialog.close()));
 ['closeActivityDialog', 'cancelActivityDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => { addingActivityAlternative = false; dialog.close(); }));
 ['closePlanDialog', 'cancelPlanDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => { addingDayAlternativeIndex = -1; planDialog.close(); }));
 planForm.addEventListener('submit', event => {
@@ -400,10 +427,34 @@ tripForm.addEventListener('submit', event => {
   const trip = normalizeTrip({ id: `trip-${Date.now()}`, name, destination, startDate, endDate, members, days });
   state.trips.push(trip); state.activeTripId = trip.id; selectedDay = 0; persist(); tripDialog.close(); renderApp(); showToast('新行程已创建');
 });
+editTripForm.addEventListener('submit', event => {
+  event.preventDefault();
+  const trip = currentTrip();
+  const name = $('#editTripName').value.trim();
+  const startDate = $('#editTripStart').value;
+  const endDate = $('#editTripEnd').value;
+  const range = dateRange(startDate, endDate);
+  if (!startDate || !endDate || range.days < 1 || range.days > 31) return showToast('日期范围需为 1 到 31 天');
+  const removedDays = trip.days.slice(range.days);
+  const hasContent = removedDays.some(day => day.activities.length || day.alternatives.length);
+  if (hasContent && !$('#editTripConfirmRemove').checked) return showToast('请确认是否删除缩短天数后的超出安排');
+  const previousDays = trip.days;
+  trip.name = name;
+  trip.startDate = startDate;
+  trip.endDate = endDate;
+  trip.days = Array.from({ length: range.days }, (_, index) => previousDays[index] || ({ title: index === 0 ? `抵达 · ${trip.destination}` : `第 ${index + 1} 天`, startTime: '09:00', activities: [], alternatives: [] }));
+  trip.days.forEach((day, index) => { if (!day.title || /^第 \d+ 天$/.test(day.title)) day.title = index === 0 ? `抵达 · ${trip.destination}` : `第 ${index + 1} 天`; });
+  selectedDay = Math.min(selectedDay, trip.days.length - 1);
+  persist();
+  editTripDialog.close();
+  renderApp();
+  showToast('行程名称和天数已更新');
+});
 state.trips = state.trips.map(normalizeTrip);
 persist();
 tripDialog.addEventListener('cancel', event => { event.preventDefault(); tripDialog.close(); });
 dialog.addEventListener('cancel', event => { event.preventDefault(); dialog.close(); });
 membersDialog.addEventListener('cancel', event => { event.preventDefault(); membersDialog.close(); });
 planDialog.addEventListener('cancel', event => { event.preventDefault(); addingDayAlternativeIndex = -1; planDialog.close(); });
+editTripDialog.addEventListener('cancel', event => { event.preventDefault(); editTripDialog.close(); });
 renderApp();
