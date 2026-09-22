@@ -48,10 +48,8 @@
         <section class="workspace">
           <div class="itinerary-panel">
             <div class="section-heading"><div><h2>行程安排</h2><span class="section-note">调整任一时段，后续安排将自动顺延</span></div><button class="button add-button" id="addActivity">＋ 添加安排</button></div>
-            <div class="days-tabs" id="daysTabs"></div>
-            <div class="day-title"><div><span class="day-label" id="dayLabel">DAY 1</span><h3 id="dayTitle">抵达京都 · 古都初见</h3></div><label class="day-start">开始时间 <input id="dayStartTime" type="time" value="09:30"></label><span class="weather">☀ 18° / 9°　晴</span></div>
-            <div id="timeline" class="timeline"></div>
-            <div class="timeline-tip">✦ <span>拖动时间或修改时长，后续安排会自动重新计算</span></div>
+            <div id="daysBoard" class="days-board"></div>
+            <div class="timeline-tip">✦ <span>每天独立显示；横向滚动查看更多天，调整任一时段后当天后续安排会自动顺延</span></div>
           </div>
 
           <aside class="right-column">

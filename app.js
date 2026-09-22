@@ -22,7 +22,7 @@ const state = storedState?.trips?.length
   : { trips: [legacyTrip || { id: 'trip-default', name: '京都慢游 · 春日家庭行', destination: '日本京都', startDate: '2026-04-03', endDate: '2026-04-07', members: 4, days: seedDays }], activeTripId: legacyTrip?.id || 'trip-default' };
 let selectedDay = 0;
 let editingIndex = -1;
-const timeline = document.querySelector('#timeline');
+const daysBoard = document.querySelector('#daysBoard');
 const toast = document.querySelector('#toast');
 const dialog = document.querySelector('#activityDialog');
 const form = document.querySelector('#activityForm');
@@ -87,39 +87,44 @@ function showToast(message) {
 }
 function renderTimeline() {
   const trip = currentTrip();
-  const activities = trip.days[selectedDay].activities;
-  let current = timeToMinutes(trip.days[selectedDay].startTime);
-  timeline.innerHTML = activities.length ? activities.map((activity, index) => {
-    const start = current; current += Number(activity.duration);
-    return `<div class="activity"><div class="time">${formatTime(start)}</div><span class="activity-dot"></span>
-      <div class="activity-card" data-index="${index}"><div class="activity-main"><span class="activity-emoji">${escapeHtml(activity.emoji)}</span><div><h4>${escapeHtml(activity.title)}</h4><p>${escapeHtml(activity.detail || '暂无备注')}</p></div></div>
-      <div class="activity-meta"><strong>¥ ${activityTotal(activity, trip.members).toLocaleString('zh-CN')}</strong><small>${escapeHtml(activity.category)} · ${activity.costMode === 'perPerson' ? '人均' : '总额'} · ${activity.duration} 分钟</small></div>
-      <div class="activity-controls"><button data-action="up" title="上移">↑</button><button data-action="down" title="下移">↓</button><button data-action="edit" title="编辑">✎</button><button data-action="delete" title="删除">×</button></div></div></div>`;
-  }).join('') : '<div class="empty-state">这一天还没有安排<br><button class="button add-button" data-empty-add>＋ 添加第一项安排</button></div>';
-  document.querySelector('#dayLabel').textContent = `DAY ${selectedDay + 1}`;
-  document.querySelector('#dayTitle').textContent = trip.days[selectedDay].title;
-  document.querySelector('#dayStartTime').value = trip.days[selectedDay].startTime;
-  timeline.querySelectorAll('.activity-card').forEach(card => card.addEventListener('click', event => {
+  const range = dateRange(trip.startDate, trip.endDate);
+  daysBoard.innerHTML = trip.days.map((day, dayIndex) => {
+    let current = timeToMinutes(day.startTime);
+    const activities = day.activities;
+    const activityHtml = activities.length ? activities.map((activity, index) => {
+      const start = current; current += Number(activity.duration);
+      return `<div class="activity"><div class="time">${formatTime(start)}</div><span class="activity-dot"></span>
+        <div class="activity-card" data-day="${dayIndex}" data-index="${index}"><div class="activity-main"><span class="activity-emoji">${escapeHtml(activity.emoji)}</span><div><h4>${escapeHtml(activity.title)}</h4><p>${escapeHtml(activity.detail || '暂无备注')}</p></div></div>
+        <div class="activity-meta"><strong>¥ ${activityTotal(activity, trip.members).toLocaleString('zh-CN')}</strong><small>${escapeHtml(activity.category)} · ${activity.costMode === 'perPerson' ? '人均' : '总额'} · ${activity.duration} 分钟</small></div>
+        <div class="activity-controls"><button data-action="up" title="上移">↑</button><button data-action="down" title="下移">↓</button><button data-action="edit" title="编辑">✎</button><button data-action="delete" title="删除">×</button></div></div></div>`;
+    }).join('') : '<div class="empty-state">暂无安排<br><button class="button add-button" data-empty-add>＋ 添加安排</button></div>';
+    const date = new Date(range.start);
+    date.setDate(date.getDate() + dayIndex);
+    return `<section class="day-column" data-day="${dayIndex}">
+      <div class="day-column-header"><div><span class="day-label">DAY ${dayIndex + 1}</span><h3>${escapeHtml(day.title)}</h3><small>${formatDate(date)}</small></div><label class="day-start">开始 <input data-day-start="${dayIndex}" type="time" value="${day.startTime}"></label></div>
+      <div class="timeline">${activityHtml}</div>
+    </section>`;
+  }).join('');
+  daysBoard.querySelectorAll('.activity-card').forEach(card => card.addEventListener('click', event => {
     const action = event.target.dataset.action;
+    const dayIndex = Number(card.dataset.day);
     const index = Number(card.dataset.index);
-    if (action === 'edit') return openEditor(index);
-    if (action === 'delete') { currentTrip().days[selectedDay].activities.splice(index, 1); persist(); renderTimeline(); updateCost(); showToast('安排已删除'); return; }
+    const activities = trip.days[dayIndex].activities;
+    if (action === 'edit') { selectedDay = dayIndex; return openEditor(index); }
+    if (action === 'delete') { activities.splice(index, 1); persist(); renderTimeline(); updateCost(); showToast('安排已删除'); return; }
     if (action === 'up' && index > 0) [activities[index - 1], activities[index]] = [activities[index], activities[index - 1]];
     if (action === 'down' && index < activities.length - 1) [activities[index], activities[index + 1]] = [activities[index + 1], activities[index]];
     if (action === 'up' || action === 'down') { persist(); renderTimeline(); showToast('顺序已调整，后续时间自动顺延'); }
   }));
-  const emptyAdd = timeline.querySelector('[data-empty-add]');
-  if (emptyAdd) emptyAdd.addEventListener('click', () => openEditor());
-}
-function renderTabs() {
-  const trip = currentTrip();
-  const range = dateRange(trip.startDate, trip.endDate);
-  document.querySelector('#daysTabs').innerHTML = trip.days.map((day, index) => {
-    const date = new Date(range.start);
-    date.setDate(date.getDate() + index);
-    return `<button class="day-tab${index === selectedDay ? ' active' : ''}" data-day="${index}">D${index + 1}<small>${formatDate(date)}</small></button>`;
-  }).join('');
-  document.querySelectorAll('.day-tab').forEach(tab => tab.addEventListener('click', () => { selectedDay = Number(tab.dataset.day); renderTabs(); renderTimeline(); }));
+  daysBoard.querySelectorAll('[data-empty-add]').forEach(button => button.addEventListener('click', () => {
+    selectedDay = Number(button.closest('.day-column').dataset.day);
+    openEditor();
+  }));
+  daysBoard.querySelectorAll('[data-day-start]').forEach(input => input.addEventListener('change', event => {
+    const dayIndex = Number(event.target.dataset.dayStart);
+    trip.days[dayIndex].startTime = event.target.value || '09:00';
+    persist(); renderTimeline(); showToast('开始时间已更新，全天行程自动顺延');
+  }));
 }
 function updateCost() {
   const trip = currentTrip();
@@ -141,7 +146,7 @@ function renderTripHeader() {
 function renderApp() {
   const trip = currentTrip();
   selectedDay = Math.min(selectedDay, trip.days.length - 1);
-  renderTripHeader(); renderTabs(); renderTimeline(); updateCost();
+  renderTripHeader(); renderTimeline(); updateCost();
 }
 function openEditor(index = -1) {
   editingIndex = index;
@@ -231,7 +236,7 @@ document.querySelector('#exportExcel').addEventListener('click', exportExcel);
 document.querySelector('#saveTripFile').addEventListener('click', saveTripFile);
 document.querySelector('#openTripFile').addEventListener('click', () => document.querySelector('#tripFileInput').click());
 document.querySelector('#tripFileInput').addEventListener('change', openTripFile);
-document.querySelector('#addActivity').addEventListener('click', () => openEditor());
+document.querySelector('#addActivity').addEventListener('click', () => { selectedDay = 0; openEditor(); });
 document.querySelector('#addMember').addEventListener('click', () => {
   const trip = currentTrip();
   trip.members += 1;
@@ -241,10 +246,6 @@ document.querySelector('#addMember').addEventListener('click', () => {
   showToast(`已添加成员，费用已重算为 ${trip.members} 人`);
 });
 document.querySelector('#manageMembers').addEventListener('click', () => showToast('成员管理可在后续版本编辑角色与年龄'));
-$('#dayStartTime').addEventListener('change', event => {
-  currentTrip().days[selectedDay].startTime = event.target.value || '09:00';
-  persist(); renderTimeline(); showToast('开始时间已更新，全天行程自动顺延');
-});
 document.querySelector('#newTripButton').addEventListener('click', () => {
   const today = new Date();
   const iso = date => date.toISOString().slice(0, 10);
