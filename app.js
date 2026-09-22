@@ -13,7 +13,23 @@ const seedDays = [
   ...['岚山竹林 · 渡月桥', '伏见稻荷 · 宇治抹茶', '奈良一日 · 与鹿相遇', '返程 · 带着春色回家'].map(title => ({ title, startTime: '09:00', activities: [] }))
 ];
 const stateKey = 'familyTripPlanner';
-const storedState = JSON.parse(localStorage.getItem(stateKey) || 'null');
+const CURRENT_SCHEMA_VERSION = 3;
+function parseStoredState() {
+  const raw = localStorage.getItem(stateKey);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.storageSchemaVersion && parsed.storageSchemaVersion > CURRENT_SCHEMA_VERSION) {
+      console.warn(`本地行程数据版本 ${parsed.storageSchemaVersion} 高于当前版本 ${CURRENT_SCHEMA_VERSION}`);
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    console.warn('本地行程数据无法解析，将使用默认行程', error);
+    return null;
+  }
+}
+const storedState = parseStoredState();
 const legacyTrip = storedState?.days?.length
   ? { id: 'trip-legacy', name: '京都慢游 · 春日家庭行', destination: '日本京都', startDate: '2026-04-03', endDate: '2026-04-07', members: Number(storedState.members) || 4, days: storedState.days }
   : null;
@@ -39,7 +55,35 @@ const editTripDialog = document.querySelector('#editTripDialog');
 const editTripForm = document.querySelector('#editTripForm');
 const $ = selector => document.querySelector(selector);
 
-function persist() { localStorage.setItem(stateKey, JSON.stringify(state)); }
+function persist() { localStorage.setItem(stateKey, JSON.stringify({ ...state, storageSchemaVersion: CURRENT_SCHEMA_VERSION })); }
+function migrateTripFile(fileData) {
+  if (!fileData || fileData.format !== 'FamilyTrip' || !fileData.trip || !Array.isArray(fileData.trip.days)) throw new Error('文件格式不正确');
+  const sourceVersion = fileData.schemaVersion === undefined ? 1 : Number(fileData.schemaVersion);
+  if (!Number.isInteger(sourceVersion) || sourceVersion < 1) throw new Error('文件版本号不正确');
+  if (sourceVersion > CURRENT_SCHEMA_VERSION) throw new Error(`文件版本 ${sourceVersion} 高于当前应用支持的版本 ${CURRENT_SCHEMA_VERSION}，请升级应用后再打开`);
+  let trip = { ...fileData.trip };
+  if (sourceVersion < 2) {
+    trip.familyMembers = Array.isArray(trip.familyMembers) ? trip.familyMembers : [];
+    trip.days = trip.days.map(day => ({ ...day, alternatives: Array.isArray(day.alternatives) ? day.alternatives : [] }));
+  }
+  if (sourceVersion < 3) {
+    trip.days = trip.days.map(day => ({
+      ...day,
+      activities: (Array.isArray(day.activities) ? day.activities : []).map(activity => ({
+        ...activity,
+        timeLocked: activity.timeLocked === true || Boolean(activity.time)
+      })),
+      alternatives: (Array.isArray(day.alternatives) ? day.alternatives : []).map(option => ({
+        ...option,
+        activities: (Array.isArray(option.activities) ? option.activities : []).map(activity => ({
+          ...activity,
+          timeLocked: activity.timeLocked === true || Boolean(activity.time)
+        }))
+      }))
+    }));
+  }
+  return { trip: normalizeTrip({ ...trip, id: `trip-${Date.now()}` }), migratedFrom: sourceVersion, schemaVersion: CURRENT_SCHEMA_VERSION };
+}
 function defaultFamilyMembers(count) {
   return Array.from({ length: count }, (_, index) => ({
     id: `member-${index + 1}`,
@@ -328,7 +372,7 @@ function saveTripFile() {
   const trip = currentTrip();
   const fileData = {
     format: 'FamilyTrip',
-    schemaVersion: 2,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     trip: {
       ...trip,
@@ -355,14 +399,14 @@ function openTripFile(event) {
   reader.onload = () => {
     try {
       const parsed = JSON.parse(String(reader.result));
-      if (parsed.format !== 'FamilyTrip' || !parsed.trip || !Array.isArray(parsed.trip.days)) throw new Error('文件格式不正确');
-      const trip = normalizeTrip({ ...parsed.trip, id: `trip-${Date.now()}` });
+      const migration = migrateTripFile(parsed);
+      const trip = migration.trip;
       state.trips.push(trip);
       state.activeTripId = trip.id;
       selectedDay = 0;
       persist();
       renderApp();
-      showToast('行程文件已打开');
+      showToast(migration.migratedFrom < CURRENT_SCHEMA_VERSION ? `行程文件已打开并从 v${migration.migratedFrom} 升级到 v${CURRENT_SCHEMA_VERSION}` : '行程文件已打开');
     } catch (error) {
       showToast(`无法打开行程文件：${error.message}`);
     } finally {
