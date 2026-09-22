@@ -76,6 +76,14 @@
         <div class="dialog-actions"><button class="button secondary" type="button" id="cancelMembersDialog">取消</button><button class="button primary" type="submit">保存成员设置</button></div>
       </form>
     </dialog>
+    <dialog id="planDialog" class="activity-dialog plan-dialog">
+      <form method="dialog" id="planForm">
+        <div class="dialog-heading"><div><span class="day-label">备用整日方案</span><h2>添加一个可切换的整日安排</h2></div><button class="close-dialog" type="button" id="closePlanDialog" aria-label="关闭">×</button></div>
+        <label>方案名称<input id="planName" required maxlength="30" placeholder="例如：雨天室内方案"></label>
+        <p class="dialog-help">将复制当前主方案作为起点，之后可切换并继续编辑。</p>
+        <div class="dialog-actions"><button class="button secondary" type="button" id="cancelPlanDialog">取消</button><button class="button primary" type="submit">添加备用方案</button></div>
+      </form>
+    </dialog>
     <dialog id="tripDialog" class="activity-dialog trip-dialog">
       <form method="dialog" id="tripForm">
         <div class="dialog-heading"><div><span class="day-label">新建旅行</span><h2>创建一份新的行程计划</h2></div><button class="close-dialog" type="button" id="closeTripDialog" aria-label="关闭">×</button></div>

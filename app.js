@@ -22,12 +22,17 @@ const state = storedState?.trips?.length
   : { trips: [legacyTrip || { id: 'trip-default', name: '京都慢游 · 春日家庭行', destination: '日本京都', startDate: '2026-04-03', endDate: '2026-04-07', members: 4, days: seedDays }], activeTripId: legacyTrip?.id || 'trip-default' };
 let selectedDay = 0;
 let editingIndex = -1;
+let editingAlternativeIndex = -1;
+let addingActivityAlternative = false;
+let addingDayAlternativeIndex = -1;
 const daysBoard = document.querySelector('#daysBoard');
 const toast = document.querySelector('#toast');
 const dialog = document.querySelector('#activityDialog');
 const form = document.querySelector('#activityForm');
 const tripDialog = document.querySelector('#tripDialog');
 const tripForm = document.querySelector('#tripForm');
+const planDialog = document.querySelector('#planDialog');
+const planForm = document.querySelector('#planForm');
 const $ = selector => document.querySelector(selector);
 
 function persist() { localStorage.setItem(stateKey, JSON.stringify(state)); }
@@ -45,7 +50,7 @@ function normalizeTrip(trip) {
   const days = Array.isArray(trip.days) && trip.days.length ? trip.days : [{ title: '第一天', startTime: '09:00', activities: [] }];
   const members = Number(trip.members) || 1;
   const familyMembers = (Array.isArray(trip.familyMembers) && trip.familyMembers.length ? trip.familyMembers : defaultFamilyMembers(members)).map(normalizeMember);
-  return { ...trip, members: familyMembers.length, familyMembers, days: days.map((day, index) => ({ ...day, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities.map(normalizeActivity) : [] })) };
+  return { ...trip, members: familyMembers.length, familyMembers, days: days.map((day, index) => ({ ...day, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities.map(normalizeActivity) : [], alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(normalizeDayAlternative) : [] })) };
 }
 function normalizeMember(member, index) {
   const age = member.age === null || member.age === '' ? null : Number(member.age);
@@ -54,7 +59,11 @@ function normalizeMember(member, index) {
   return { id: member.id || `member-${index + 1}`, name: member.name || `成员 ${index + 1}`, role, age, weights: { transport: Number(member.weights?.transport ?? defaults), ticket: Number(member.weights?.ticket ?? defaults), dining: Number(member.weights?.dining ?? defaults) } };
 }
 function normalizeActivity(activity) {
-  return { ...activity, category: activity.category || '其他', costMode: activity.costMode === 'perPerson' ? 'perPerson' : 'total', cost: Math.max(0, Number(activity.cost) || 0) };
+  const alternatives = Array.isArray(activity.alternatives) ? activity.alternatives.map(item => normalizeActivity({ ...item, alternatives: [] })) : [];
+  return { ...activity, category: activity.category || '其他', costMode: activity.costMode === 'perPerson' ? 'perPerson' : 'total', cost: Math.max(0, Number(activity.cost) || 0), alternatives };
+}
+function normalizeDayAlternative(alternative) {
+  return { id: alternative.id || `day-option-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: alternative.name || '备用方案', activities: Array.isArray(alternative.activities) ? alternative.activities.map(normalizeActivity) : [] };
 }
 function activityTotal(activity, members) {
   return Number(activity.cost || 0) * (activity.costMode === 'perPerson' ? members : 1);
@@ -134,23 +143,53 @@ function renderTimeline() {
     const activities = day.activities;
     const activityHtml = activities.length ? activities.map((activity, index) => {
       const start = current; current += Number(activity.duration);
+      const alternativeButtons = activity.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-action="select-activity-alternative" data-alternative-index="${alternativeIndex}">备选：${escapeHtml(alternative.title)}</button>`).join('');
       return `<div class="activity"><div class="time">${formatTime(start)}</div><span class="activity-dot"></span>
         <div class="activity-card" data-day="${dayIndex}" data-index="${index}"><div class="activity-main"><span class="activity-emoji">${escapeHtml(activity.emoji)}</span><div><h4>${escapeHtml(activity.title)}</h4><p>${escapeHtml(activity.detail || '暂无备注')}</p></div></div>
           <div class="activity-meta"><strong>¥ ${activityTotalForTrip(activity, trip).toLocaleString('zh-CN')}</strong><small>${escapeHtml(activity.category)} · ${activity.costMode === 'perPerson' ? '按权重' : '总额'} · ${activity.duration} 分钟</small></div>
-        <div class="activity-controls"><button data-action="up" title="上移">↑</button><button data-action="down" title="下移">↓</button><button data-action="edit" title="编辑">✎</button><button data-action="delete" title="删除">×</button></div></div></div>`;
+        <div class="activity-controls"><button data-action="up" title="上移">↑</button><button data-action="down" title="下移">↓</button><button data-action="edit" title="编辑">✎</button><button data-action="add-alternative" title="添加活动备用方案">备选</button><button data-action="delete" title="删除">×</button></div>
+        ${alternativeButtons ? `<div class="activity-alternatives"><span>备用方案：</span>${alternativeButtons}</div>` : ''}</div></div>`;
     }).join('') : '<div class="empty-state">暂无安排<br><button class="button add-button" data-empty-add>＋ 添加安排</button></div>';
     const date = new Date(range.start);
     date.setDate(date.getDate() + dayIndex);
+    const dayAlternatives = day.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-day="${dayIndex}" data-alternative-index="${alternativeIndex}" data-action="select-day-alternative">备用：${escapeHtml(alternative.name)}</button>`).join('');
     return `<section class="day-column" data-day="${dayIndex}">
-      <div class="day-column-header"><div><span class="day-label">DAY ${dayIndex + 1}</span><h3>${escapeHtml(day.title)}</h3><small>${formatDate(date)}</small></div><label class="day-start">开始 <input data-day-start="${dayIndex}" type="time" value="${day.startTime}"></label></div>
+      <div class="day-column-header"><div><span class="day-label">DAY ${dayIndex + 1}</span><h3>${escapeHtml(day.title)}</h3><small>${formatDate(date)}</small></div><div class="day-plan-actions"><label class="day-start">开始 <input data-day-start="${dayIndex}" type="time" value="${day.startTime}"></label><button class="plan-button" data-day="${dayIndex}" data-action="add-day-alternative">＋ 备用整日</button>${dayAlternatives}</div></div>
       <div class="timeline">${activityHtml}</div>
     </section>`;
   }).join('');
-  daysBoard.querySelectorAll('.activity-card').forEach(card => card.addEventListener('click', event => {
+  daysBoard.querySelectorAll('.activity-card, [data-action="add-day-alternative"], [data-action="select-day-alternative"]').forEach(card => card.addEventListener('click', event => {
     const action = event.target.dataset.action;
     const dayIndex = Number(card.dataset.day);
     const index = Number(card.dataset.index);
     const activities = trip.days[dayIndex].activities;
+    if (action === 'select-day-alternative') {
+      const alternativeIndex = Number(event.target.dataset.alternativeIndex);
+      const alternative = trip.days[dayIndex].alternatives[alternativeIndex];
+      [trip.days[dayIndex].activities, alternative.activities] = [alternative.activities, trip.days[dayIndex].activities];
+      persist(); renderTimeline(); updateCost(); showToast(`已切换到整日备用方案“${alternative.name}”，原方案已保留为备用`);
+      return;
+    }
+    if (action === 'add-day-alternative') {
+      addingDayAlternativeIndex = dayIndex;
+      $('#planName').value = `备用方案 ${trip.days[dayIndex].alternatives.length + 1}`;
+      planDialog.showModal();
+      $('#planName').focus();
+      return;
+    }
+    if (action === 'select-activity-alternative') {
+      const alternativeIndex = Number(event.target.dataset.alternativeIndex);
+      const activity = activities[index];
+      const primary = { ...activity, alternatives: [] };
+      const alternative = activity.alternatives[alternativeIndex];
+      Object.assign(activity, { ...alternative, alternatives: activity.alternatives });
+      activity.alternatives[alternativeIndex] = primary;
+      persist(); renderTimeline(); updateCost(); showToast('已切换活动备用方案，原安排已保留为备用');
+      return;
+    }
+    if (action === 'add-alternative') {
+      selectedDay = dayIndex; addingActivityAlternative = true; openEditor(index); return;
+    }
     if (action === 'edit') { selectedDay = dayIndex; return openEditor(index); }
     if (action === 'delete') { activities.splice(index, 1); persist(); renderTimeline(); updateCost(); showToast('安排已删除'); return; }
     if (action === 'up' && index > 0) [activities[index - 1], activities[index]] = [activities[index], activities[index - 1]];
@@ -195,7 +234,7 @@ function renderApp() {
 function openEditor(index = -1) {
   editingIndex = index;
   const activity = index >= 0 ? currentTrip().days[selectedDay].activities[index] : { title: '', detail: '', emoji: '📍', category: '其他', cost: 0, costMode: 'total', duration: 60 };
-  $('#dialogMode').textContent = index >= 0 ? '编辑安排' : '新增安排';
+  $('#dialogMode').textContent = addingActivityAlternative ? '新增活动备用方案' : (index >= 0 ? '编辑安排' : '新增安排');
   $('#dialogTitle').textContent = index >= 0 ? activity.title : '添加行程';
   $('#activityName').value = activity.title; $('#activityDetail').value = activity.detail;
   $('#activityEmoji').value = activity.emoji; $('#activityCategory').value = activity.category || '其他'; $('#activityCost').value = activity.cost; $('#activityCostMode').value = activity.costMode || 'total'; $('#activityDuration').value = activity.duration;
@@ -207,9 +246,13 @@ form.addEventListener('submit', event => {
   if (!Number.isInteger(duration) || duration < 10 || duration > 720) return showToast('时长需为 10 - 720 分钟的整数');
   const activity = normalizeActivity({ title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), emoji: $('#activityEmoji').value.trim() || '📍', category: $('#activityCategory').value, cost: Number($('#activityCost').value) || 0, costMode: $('#activityCostMode').value, duration });
   if (!activity.title) return showToast('请填写安排名称');
-  if (editingIndex >= 0) currentTrip().days[selectedDay].activities[editingIndex] = { ...currentTrip().days[selectedDay].activities[editingIndex], ...activity };
+  if (addingActivityAlternative) {
+    currentTrip().days[selectedDay].activities[editingIndex].alternatives.push(activity);
+  } else if (editingIndex >= 0) currentTrip().days[selectedDay].activities[editingIndex] = { ...currentTrip().days[selectedDay].activities[editingIndex], ...activity };
   else { activity.time = currentTrip().days[selectedDay].startTime; currentTrip().days[selectedDay].activities.push(activity); }
-  persist(); dialog.close(); renderTimeline(); updateCost(); showToast(editingIndex >= 0 ? '安排已更新，后续时间自动顺延' : '安排已添加');
+  const wasAlternative = addingActivityAlternative;
+  addingActivityAlternative = false;
+  persist(); dialog.close(); renderTimeline(); updateCost(); showToast(wasAlternative ? '活动备用方案已添加' : (editingIndex >= 0 ? '安排已更新，后续时间自动顺延' : '安排已添加'));
 });
 function exportExcel() {
   const trip = currentTrip();
@@ -232,7 +275,7 @@ function saveTripFile() {
   const trip = currentTrip();
   const fileData = {
     format: 'FamilyTrip',
-    schemaVersion: 1,
+    schemaVersion: 2,
     exportedAt: new Date().toISOString(),
     trip: {
       ...trip,
@@ -331,7 +374,18 @@ document.querySelector('#newTripButton').addEventListener('click', () => {
   tripDialog.showModal(); $('#newTripName').focus();
 });
 ['closeTripDialog', 'cancelTripDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => tripDialog.close()));
-['closeActivityDialog', 'cancelActivityDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => dialog.close()));
+['closeActivityDialog', 'cancelActivityDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => { addingActivityAlternative = false; dialog.close(); }));
+['closePlanDialog', 'cancelPlanDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => { addingDayAlternativeIndex = -1; planDialog.close(); }));
+planForm.addEventListener('submit', event => {
+  event.preventDefault();
+  const dayIndex = addingDayAlternativeIndex;
+  const name = $('#planName').value.trim();
+  if (dayIndex < 0 || !name) return showToast('请填写备用方案名称');
+  const day = currentTrip().days[dayIndex];
+  day.alternatives.push(normalizeDayAlternative({ name, activities: day.activities.map(activity => ({ ...activity, alternatives: [] })) }));
+  addingDayAlternativeIndex = -1;
+  persist(); planDialog.close(); renderTimeline(); showToast('整日备用方案已添加');
+});
 tripForm.addEventListener('submit', event => {
   event.preventDefault();
   const name = $('#newTripName').value.trim();
@@ -351,4 +405,5 @@ persist();
 tripDialog.addEventListener('cancel', event => { event.preventDefault(); tripDialog.close(); });
 dialog.addEventListener('cancel', event => { event.preventDefault(); dialog.close(); });
 membersDialog.addEventListener('cancel', event => { event.preventDefault(); membersDialog.close(); });
+planDialog.addEventListener('cancel', event => { event.preventDefault(); addingDayAlternativeIndex = -1; planDialog.close(); });
 renderApp();
