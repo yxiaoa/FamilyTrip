@@ -48,7 +48,7 @@
         <section class="workspace">
           <aside class="right-column">
             <div class="map-card"><div class="card-heading"><h3>今日路线</h3><button class="link-button" id="openMap">在地图中打开 ↗</button></div><div class="map-visual"><div class="map-grid"></div><svg viewBox="0 0 320 150" preserveAspectRatio="none"><path class="route-line" d="M25 119 C82 92, 77 42, 142 55 S200 118, 288 27"></path><circle cx="25" cy="119" r="7" class="route-point start"></circle><circle cx="142" cy="55" r="7" class="route-point"></circle><circle cx="288" cy="27" r="7" class="route-point end"></circle></svg><span class="map-label label-a">京都站</span><span class="map-label label-b">锦市场</span><span class="map-label label-c">清水寺</span></div><div class="route-summary"><span>⌁ 3 个地点</span><span>↗ 12.4 km</span><span>◷ 48 分钟</span></div></div>
-            <div class="members-card"><div class="card-heading"><h3>同行家庭</h3><button class="link-button" id="manageMembers">管理</button></div><div class="member-list" id="memberList"><div class="member-row"><span class="member-avatar orange">林</span><div><strong>林先生</strong><small>成人 · 主要联系人</small></div><span class="check">✓</span></div><div class="member-row"><span class="member-avatar blue-bg">林</span><div><strong>林太太</strong><small>成人</small></div><span class="check">✓</span></div><div class="member-row"><span class="member-avatar yellow">林</span><div><strong>小林</strong><small>儿童 · 8岁</small></div><span class="check">✓</span></div><div class="member-row"><span class="member-avatar pink">林</span><div><strong>小小林</strong><small>儿童 · 5岁</small></div><span class="check">✓</span></div></div><button class="invite-button" id="addMember">＋ 添加家庭成员</button></div>
+            <div class="members-card"><div class="card-heading"><h3>同行家庭</h3><button class="link-button" id="manageMembers">管理</button></div><div class="member-list" id="memberList"></div><button class="invite-button" id="addMember">＋ 添加家庭成员</button></div>
             <div class="notice-card"><span class="notice-icon">↗</span><div><strong>人数变化会自动重算</strong><p>房间、车辆与门票费用将随家庭成员变化自动更新。</p></div></div>
           </aside>
           <div class="itinerary-panel">
@@ -67,6 +67,15 @@
         <label>详细说明<input id="activityDetail" maxlength="80" placeholder="地点、交通或备注"></label>
         <div class="form-grid"><label>图标<input id="activityEmoji" maxlength="2" value="📍"></label><label>费用类别<select id="activityCategory"><option value="交通费">交通费</option><option value="机票">机票</option><option value="住宿费">住宿费</option><option value="餐饮费">餐饮费</option><option value="门票">门票</option><option value="其他">其他</option></select></label><label>费用金额（¥）<input id="activityCost" type="number" min="0" step="1" value="0"></label><label>计费方式<select id="activityCostMode"><option value="total">总费用</option><option value="perPerson">人均费用</option></select></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="5" value="60"></label></div>
         <div class="dialog-actions"><button class="button secondary" type="button" id="cancelActivityDialog">取消</button><button class="button primary" id="saveActivity" value="default">保存安排</button></div>
+      </form>
+    </dialog>
+    <dialog id="membersDialog" class="activity-dialog members-dialog">
+      <form method="dialog" id="membersForm">
+        <div class="dialog-heading"><div><span class="day-label">同行家庭</span><h2>成员与优惠权重</h2></div><button class="close-dialog" type="button" id="closeMembersDialog" aria-label="关闭">×</button></div>
+        <p class="dialog-help">权重代表该成员按几份费用计算。成人默认 1；儿童、老人可按交通、门票、餐饮分别设置。</p>
+        <div id="membersEditor" class="members-editor"></div>
+        <button type="button" class="invite-button" id="addMemberInDialog">＋ 添加成员</button>
+        <div class="dialog-actions"><button class="button secondary" type="button" id="cancelMembersDialog">取消</button><button class="button primary" type="submit">保存成员设置</button></div>
       </form>
     </dialog>
     <dialog id="tripDialog" class="activity-dialog trip-dialog">

@@ -36,20 +36,61 @@ function defaultFamilyMembers(count) {
     id: `member-${index + 1}`,
     name: index === 0 ? '主要联系人' : `成员 ${index + 1}`,
     role: index < 2 ? '成人' : '儿童',
-    age: null
+    age: index < 2 ? null : 8,
+    weights: index < 2 ? { transport: 1, ticket: 1, dining: 1 } : { transport: 0.5, ticket: 0.5, dining: 0.5 }
   }));
 }
 function currentTrip() { return state.trips.find(trip => trip.id === state.activeTripId) || state.trips[0]; }
 function normalizeTrip(trip) {
   const days = Array.isArray(trip.days) && trip.days.length ? trip.days : [{ title: '第一天', startTime: '09:00', activities: [] }];
   const members = Number(trip.members) || 1;
-  return { ...trip, members, familyMembers: Array.isArray(trip.familyMembers) && trip.familyMembers.length ? trip.familyMembers : defaultFamilyMembers(members), days: days.map((day, index) => ({ ...day, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities.map(normalizeActivity) : [] })) };
+  const familyMembers = (Array.isArray(trip.familyMembers) && trip.familyMembers.length ? trip.familyMembers : defaultFamilyMembers(members)).map(normalizeMember);
+  return { ...trip, members: familyMembers.length, familyMembers, days: days.map((day, index) => ({ ...day, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities.map(normalizeActivity) : [] })) };
+}
+function normalizeMember(member, index) {
+  const age = member.age === null || member.age === '' ? null : Number(member.age);
+  const role = age !== null ? (age < 12 ? '儿童' : age >= 60 ? '老人' : '成人') : (member.role || '成人');
+  const defaults = role === '儿童' ? 0.5 : role === '老人' ? 0.8 : 1;
+  return { id: member.id || `member-${index + 1}`, name: member.name || `成员 ${index + 1}`, role, age, weights: { transport: Number(member.weights?.transport ?? defaults), ticket: Number(member.weights?.ticket ?? defaults), dining: Number(member.weights?.dining ?? defaults) } };
 }
 function normalizeActivity(activity) {
   return { ...activity, category: activity.category || '其他', costMode: activity.costMode === 'perPerson' ? 'perPerson' : 'total', cost: Math.max(0, Number(activity.cost) || 0) };
 }
 function activityTotal(activity, members) {
   return Number(activity.cost || 0) * (activity.costMode === 'perPerson' ? members : 1);
+}
+function expenseCategory(category) {
+  if (category === '交通费' || category === '机票') return 'transport';
+  if (category === '门票') return 'ticket';
+  if (category === '餐饮费') return 'dining';
+  return null;
+}
+function activityTotalForTrip(activity, trip) {
+  if (activity.costMode !== 'perPerson') return Number(activity.cost || 0);
+  const key = expenseCategory(activity.category);
+  const units = key ? trip.familyMembers.reduce((sum, member) => sum + member.weights[key], 0) : trip.members;
+  return Number(activity.cost || 0) * units;
+}
+function renderMembers() {
+  const trip = currentTrip();
+  const colors = ['orange', 'blue-bg', 'yellow', 'pink'];
+  $('#memberList').innerHTML = trip.familyMembers.map((member, index) => `<div class="member-row"><span class="member-avatar ${colors[index % colors.length]}">${escapeHtml(member.name.slice(0, 1))}</span><div><strong>${escapeHtml(member.name)}</strong><small>${member.role}${member.age !== null ? ` · ${member.age}岁` : ''}</small></div><span class="check">✓</span></div>`).join('');
+}
+function memberEditorRow(member, index) {
+  return `<div class="member-editor-row" data-member-index="${index}">
+    <div class="member-editor-top"><strong>成员 ${index + 1}</strong><button type="button" class="remove-member" data-remove-member="${index}">删除</button></div>
+    <div class="member-editor-fields"><label>姓名<input data-member-name value="${escapeHtml(member.name)}" maxlength="20" required></label><label>年龄<input data-member-age type="number" min="0" max="120" value="${member.age ?? ''}"></label></div>
+    <div class="weight-grid"><label>交通<input data-weight="transport" type="number" min="0" max="2" step="0.1" value="${member.weights.transport}"></label><label>门票<input data-weight="ticket" type="number" min="0" max="2" step="0.1" value="${member.weights.ticket}"></label><label>餐饮<input data-weight="dining" type="number" min="0" max="2" step="0.1" value="${member.weights.dining}"></label></div>
+  </div>`;
+}
+function renderMembersEditor() {
+  $('#membersEditor').innerHTML = currentTrip().familyMembers.map(memberEditorRow).join('');
+  $('#membersEditor').querySelectorAll('[data-remove-member]').forEach(button => button.addEventListener('click', () => {
+    if (currentTrip().familyMembers.length <= 1) return showToast('至少保留 1 位同行人');
+    currentTrip().familyMembers.splice(Number(button.dataset.removeMember), 1);
+    currentTrip().members = currentTrip().familyMembers.length;
+    renderMembersEditor();
+  }));
 }
 function formatDate(date) {
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', weekday: 'short' }).format(date);
@@ -95,7 +136,7 @@ function renderTimeline() {
       const start = current; current += Number(activity.duration);
       return `<div class="activity"><div class="time">${formatTime(start)}</div><span class="activity-dot"></span>
         <div class="activity-card" data-day="${dayIndex}" data-index="${index}"><div class="activity-main"><span class="activity-emoji">${escapeHtml(activity.emoji)}</span><div><h4>${escapeHtml(activity.title)}</h4><p>${escapeHtml(activity.detail || '暂无备注')}</p></div></div>
-        <div class="activity-meta"><strong>¥ ${activityTotal(activity, trip.members).toLocaleString('zh-CN')}</strong><small>${escapeHtml(activity.category)} · ${activity.costMode === 'perPerson' ? '人均' : '总额'} · ${activity.duration} 分钟</small></div>
+          <div class="activity-meta"><strong>¥ ${activityTotalForTrip(activity, trip).toLocaleString('zh-CN')}</strong><small>${escapeHtml(activity.category)} · ${activity.costMode === 'perPerson' ? '按权重' : '总额'} · ${activity.duration} 分钟</small></div>
         <div class="activity-controls"><button data-action="up" title="上移">↑</button><button data-action="down" title="下移">↓</button><button data-action="edit" title="编辑">✎</button><button data-action="delete" title="删除">×</button></div></div></div>`;
     }).join('') : '<div class="empty-state">暂无安排<br><button class="button add-button" data-empty-add>＋ 添加安排</button></div>';
     const date = new Date(range.start);
@@ -128,11 +169,12 @@ function renderTimeline() {
 }
 function updateCost() {
   const trip = currentTrip();
-  const total = trip.days.reduce((sum, day) => sum + day.activities.reduce((daySum, item) => daySum + activityTotal(item, trip.members), 0), 0);
+  const total = trip.days.reduce((sum, day) => sum + day.activities.reduce((daySum, item) => daySum + activityTotalForTrip(item, trip), 0), 0);
   $('#memberCount').textContent = `${trip.members} 人`;
   $('#memberHint').textContent = `${Math.max(1, trip.members - 2)} 位成人 · ${Math.min(2, trip.members)} 位儿童`;
   $('#totalCost').textContent = `¥ ${total.toLocaleString('zh-CN')}`;
   $('#perPerson').textContent = Math.round(total / trip.members).toLocaleString('zh-CN');
+  renderMembers();
 }
 function renderTripHeader() {
   const trip = currentTrip();
@@ -174,7 +216,7 @@ function exportExcel() {
     return day.activities.map((a, i) => {
       const time = formatTime(current);
       current += Number(a.duration);
-      return `<tr><td>第${dayIndex + 1}天</td><td>${i + 1}</td><td>${time}</td><td>${escapeHtml(a.category)}</td><td>${a.costMode === 'perPerson' ? '人均' : '总额'}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.detail)}</td><td>${a.duration}</td><td>${activityTotal(a, trip.members)}</td></tr>`;
+      return `<tr><td>第${dayIndex + 1}天</td><td>${i + 1}</td><td>${time}</td><td>${escapeHtml(a.category)}</td><td>${a.costMode === 'perPerson' ? '按权重' : '总额'}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.detail)}</td><td>${a.duration}</td><td>${activityTotalForTrip(a, trip)}</td></tr>`;
     });
   }).join('');
   const table = `<table border="1"><tr><th>日期</th><th>序号</th><th>时间</th><th>类别</th><th>计费方式</th><th>安排</th><th>说明</th><th>时长（分钟）</th><th>总费用（¥）</th></tr>${rows}</table>`;
@@ -182,7 +224,7 @@ function exportExcel() {
   link.download = `${trip.name}-行程.xls`; link.click(); URL.revokeObjectURL(link.href); showToast('Excel 行程表已下载');
 }
 function expenseTotal(trip) {
-  return trip.days.reduce((total, day) => total + day.activities.reduce((sum, activity) => sum + activityTotal(activity, trip.members), 0), 0);
+  return trip.days.reduce((total, day) => total + day.activities.reduce((sum, activity) => sum + activityTotalForTrip(activity, trip), 0), 0);
 }
 function saveTripFile() {
   const trip = currentTrip();
@@ -239,13 +281,45 @@ document.querySelector('#tripFileInput').addEventListener('change', openTripFile
 document.querySelector('#addActivity').addEventListener('click', () => { selectedDay = 0; openEditor(); });
 document.querySelector('#addMember').addEventListener('click', () => {
   const trip = currentTrip();
-  trip.members += 1;
-  trip.familyMembers = [...(trip.familyMembers || []), ...defaultFamilyMembers(1).map(member => ({ ...member, id: `member-${Date.now()}` }))];
+  trip.familyMembers = [...(trip.familyMembers || []), normalizeMember({ id: `member-${Date.now()}`, name: `成员 ${trip.familyMembers.length + 1}`, role: '成人' }, trip.familyMembers.length)];
+  trip.members = trip.familyMembers.length;
   persist();
+  renderMembersEditor();
+  renderMembers();
   updateCost();
   showToast(`已添加成员，费用已重算为 ${trip.members} 人`);
 });
-document.querySelector('#manageMembers').addEventListener('click', () => showToast('成员管理可在后续版本编辑角色与年龄'));
+const membersDialog = document.querySelector('#membersDialog');
+const membersForm = document.querySelector('#membersForm');
+document.querySelector('#manageMembers').addEventListener('click', () => { renderMembersEditor(); membersDialog.showModal(); });
+document.querySelector('#addMemberInDialog').addEventListener('click', () => {
+  const trip = currentTrip();
+  trip.familyMembers.push(normalizeMember({ id: `member-${Date.now()}`, name: `成员 ${trip.familyMembers.length + 1}`, role: '成人' }, trip.familyMembers.length));
+  trip.members = trip.familyMembers.length;
+  renderMembersEditor();
+});
+['closeMembersDialog', 'cancelMembersDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => membersDialog.close()));
+membersForm.addEventListener('submit', event => {
+  event.preventDefault();
+  const rows = [...document.querySelectorAll('.member-editor-row')];
+  const members = rows.map((row, index) => normalizeMember({
+    ...currentTrip().familyMembers[index],
+    name: row.querySelector('[data-member-name]').value.trim(),
+    age: row.querySelector('[data-member-age]').value,
+    weights: {
+      transport: row.querySelector('[data-weight="transport"]').value,
+      ticket: row.querySelector('[data-weight="ticket"]').value,
+      dining: row.querySelector('[data-weight="dining"]').value
+    }
+  }, index));
+  if (members.some(member => !member.name)) return showToast('请填写每位成员的姓名');
+  currentTrip().familyMembers = members;
+  currentTrip().members = members.length;
+  persist();
+  membersDialog.close();
+  renderApp();
+  showToast('成员与优惠权重已保存，费用已重算');
+});
 document.querySelector('#newTripButton').addEventListener('click', () => {
   const today = new Date();
   const iso = date => date.toISOString().slice(0, 10);
@@ -274,4 +348,5 @@ state.trips = state.trips.map(normalizeTrip);
 persist();
 tripDialog.addEventListener('cancel', event => { event.preventDefault(); tripDialog.close(); });
 dialog.addEventListener('cancel', event => { event.preventDefault(); dialog.close(); });
+membersDialog.addEventListener('cancel', event => { event.preventDefault(); membersDialog.close(); });
 renderApp();
