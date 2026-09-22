@@ -50,7 +50,7 @@
             <div class="notice-card"><span class="notice-icon">↗</span><div><strong>人数变化会自动重算</strong><p>房间、车辆与门票费用将随家庭成员变化自动更新。</p></div></div>
           </aside>
           <div class="itinerary-panel">
-            <div class="section-heading"><div><h2>行程安排</h2><span class="section-note">调整任一时段，后续安排将自动顺延</span></div><button class="button add-button" id="addActivity">＋ 添加安排</button></div>
+            <div class="section-heading"><div><h2>行程安排</h2><span class="section-note">每一天可单独添加；调整时间后会保留空档并支持插入安排</span></div></div>
             <div id="daysBoard" class="days-board"></div>
             <div class="timeline-tip">✦ <span>每天独立显示；横向滚动查看更多天，调整任一时段后当天后续安排会自动顺延</span></div>
           </div>
@@ -63,7 +63,7 @@
         <div class="dialog-heading"><div><span class="day-label" id="dialogMode">新增安排</span><h2 id="dialogTitle">添加行程</h2></div><button class="close-dialog" type="button" id="closeActivityDialog" aria-label="关闭">×</button></div>
         <label>安排名称<input id="activityName" required maxlength="40" placeholder="例如：参观二条城"></label>
         <label>详细说明<input id="activityDetail" maxlength="80" placeholder="地点、交通或备注"></label>
-        <div class="form-grid"><label>图标<input id="activityEmoji" maxlength="2" value="📍"></label><label>费用类别<select id="activityCategory"><option value="交通费">交通费</option><option value="机票">机票</option><option value="住宿费">住宿费</option><option value="餐饮费">餐饮费</option><option value="门票">门票</option><option value="其他">其他</option></select></label><label>费用金额（¥）<input id="activityCost" type="number" min="0" step="1" value="0"></label><label>计费方式<select id="activityCostMode"><option value="total">总费用</option><option value="perPerson">人均费用</option></select></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="5" value="60"></label></div>
+        <div class="form-grid"><label>开始时间<input id="activityStartTime" type="time"></label><label>图标<input id="activityEmoji" maxlength="2" value="📍"></label><label>费用类别<select id="activityCategory"><option value="交通费">交通费</option><option value="机票">机票</option><option value="住宿费">住宿费</option><option value="餐饮费">餐饮费</option><option value="门票">门票</option><option value="其他">其他</option></select></label><label>费用金额（¥）<input id="activityCost" type="number" min="0" step="1" value="0"></label><label>计费方式<select id="activityCostMode"><option value="total">总费用</option><option value="perPerson">人均费用</option></select></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="5" value="60"></label></div>
         <div class="dialog-actions"><button class="button secondary" type="button" id="cancelActivityDialog">取消</button><button class="button primary" id="saveActivity" value="default">保存安排</button></div>
       </form>
     </dialog>
