@@ -14,6 +14,8 @@ const seedDays = [
 ];
 const stateKey = 'familyTripPlanner';
 const CURRENT_SCHEMA_VERSION = 3;
+const tripHandleDatabaseName = 'familyTripFileHandles';
+const tripHandleStoreName = 'handles';
 function parseStoredState() {
   const raw = localStorage.getItem(stateKey);
   if (!raw) return null;
@@ -56,6 +58,55 @@ const editTripForm = document.querySelector('#editTripForm');
 const $ = selector => document.querySelector(selector);
 
 function persist() { localStorage.setItem(stateKey, JSON.stringify({ ...state, storageSchemaVersion: CURRENT_SCHEMA_VERSION })); }
+function supportsFileHandles() {
+  return 'showOpenFilePicker' in window && 'showSaveFilePicker' in window && 'indexedDB' in window;
+}
+function openHandleDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(tripHandleDatabaseName, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(tripHandleStoreName);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+async function readTripHandle(tripId) {
+  if (!supportsFileHandles()) return null;
+  const database = await openHandleDatabase();
+  return new Promise((resolve, reject) => {
+    const request = database.transaction(tripHandleStoreName, 'readonly').objectStore(tripHandleStoreName).get(tripId);
+    request.onsuccess = () => { database.close(); resolve(request.result || null); };
+    request.onerror = () => { database.close(); reject(request.error); };
+  });
+}
+async function storeTripHandle(tripId, handle) {
+  if (!supportsFileHandles()) return;
+  const database = await openHandleDatabase();
+  await new Promise((resolve, reject) => {
+    const request = database.transaction(tripHandleStoreName, 'readwrite').objectStore(tripHandleStoreName).put(handle, tripId);
+    request.onsuccess = () => { database.close(); resolve(); };
+    request.onerror = () => { database.close(); reject(request.error); };
+  });
+}
+async function canWriteHandle(handle) {
+  if ((await handle.queryPermission({ mode: 'readwrite' })) === 'granted') return true;
+  return (await handle.requestPermission({ mode: 'readwrite' })) === 'granted';
+}
+function tripFileData(trip) {
+  return {
+    format: 'FamilyTrip',
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    trip: {
+      ...trip,
+      familyMembers: trip.familyMembers || defaultFamilyMembers(trip.members),
+      expenseSummary: {
+        activityTotal: expenseTotal(trip),
+        estimatedTotal: expenseTotal(trip),
+        currency: 'CNY'
+      }
+    }
+  };
+}
 function migrateTripFile(fileData) {
   if (!fileData || fileData.format !== 'FamilyTrip' || !fileData.trip || !Array.isArray(fileData.trip.days)) throw new Error('文件格式不正确');
   const sourceVersion = fileData.schemaVersion === undefined ? 1 : Number(fileData.schemaVersion);
@@ -368,57 +419,88 @@ function exportExcel() {
 function expenseTotal(trip) {
   return trip.days.reduce((total, day) => total + day.activities.reduce((sum, activity) => sum + activityTotalForTrip(activity, trip), 0), 0);
 }
-function saveTripFile() {
-  const trip = currentTrip();
-  const fileData = {
-    format: 'FamilyTrip',
-    schemaVersion: CURRENT_SCHEMA_VERSION,
-    exportedAt: new Date().toISOString(),
-    trip: {
-      ...trip,
-      familyMembers: trip.familyMembers || defaultFamilyMembers(trip.members),
-      expenseSummary: {
-        activityTotal: expenseTotal(trip),
-        estimatedTotal: expenseTotal(trip),
-        currency: 'CNY'
-      }
-    }
-  };
+function downloadTripFile(fileData, trip) {
   const blob = new Blob([JSON.stringify(fileData, null, 2)], { type: 'application/json;charset=utf-8' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = tripFileName(trip);
   link.click();
   URL.revokeObjectURL(link.href);
-  showToast('行程文件已保存，可下次继续打开修改');
+}
+async function saveTripFile() {
+  const trip = currentTrip();
+  const fileData = tripFileData(trip);
+  try {
+    if (supportsFileHandles()) {
+      let handle = await readTripHandle(trip.id);
+      if (!handle || !(await canWriteHandle(handle))) {
+        handle = await window.showSaveFilePicker({
+          suggestedName: tripFileName(trip),
+          types: [{ description: '行迹旅行文件', accept: { 'application/json': ['.trip.json', '.json'] } }]
+        });
+        await storeTripHandle(trip.id, handle);
+      }
+      const writable = await handle.createWritable();
+      await writable.write(JSON.stringify(fileData, null, 2));
+      await writable.close();
+      showToast(`行程已保存到 ${handle.name}`);
+      return;
+    }
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    console.error('保存行程文件失败', error);
+    if (error.name === 'SecurityError' || error.name === 'NotSupportedError') {
+      downloadTripFile(fileData, trip);
+      showToast('当前环境不能写回原文件，已下载行程文件');
+      return;
+    }
+    showToast(`无法保存到原文件：${error.message}`);
+    return;
+  }
+  downloadTripFile(fileData, trip);
+  showToast('当前浏览器不支持原文件保存，已下载行程文件');
+}
+async function importTripFile(file) {
+  const parsed = JSON.parse(await file.text());
+  const migration = migrateTripFile(parsed);
+  const trip = migration.trip;
+  state.trips.push(trip);
+  state.activeTripId = trip.id;
+  selectedDay = 0;
+  persist();
+  renderApp();
+  return migration;
+}
+async function openTripFileWithHandle() {
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      multiple: false,
+      types: [{ description: '行迹旅行文件', accept: { 'application/json': ['.trip.json', '.json'] } }]
+    });
+    const migration = await importTripFile(await handle.getFile());
+    await storeTripHandle(migration.trip.id, handle);
+    showToast(migration.migratedFrom < CURRENT_SCHEMA_VERSION ? `行程文件已打开并从 v${migration.migratedFrom} 升级到 v${CURRENT_SCHEMA_VERSION}` : `行程文件已打开：${handle.name}`);
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    console.error('打开行程文件失败', error);
+    showToast(`无法打开行程文件：${error.message}`);
+  }
 }
 function openTripFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const parsed = JSON.parse(String(reader.result));
-      const migration = migrateTripFile(parsed);
-      const trip = migration.trip;
-      state.trips.push(trip);
-      state.activeTripId = trip.id;
-      selectedDay = 0;
-      persist();
-      renderApp();
-      showToast(migration.migratedFrom < CURRENT_SCHEMA_VERSION ? `行程文件已打开并从 v${migration.migratedFrom} 升级到 v${CURRENT_SCHEMA_VERSION}` : '行程文件已打开');
-    } catch (error) {
-      showToast(`无法打开行程文件：${error.message}`);
-    } finally {
-      event.target.value = '';
-    }
-  };
-  reader.readAsText(file, 'utf-8');
+  importTripFile(file)
+    .then(migration => showToast(migration.migratedFrom < CURRENT_SCHEMA_VERSION ? `行程文件已打开并从 v${migration.migratedFrom} 升级到 v${CURRENT_SCHEMA_VERSION}` : '行程文件已打开'))
+    .catch(error => showToast(`无法打开行程文件：${error.message}`))
+    .finally(() => { event.target.value = ''; });
 }
 document.querySelector('#printPdf').addEventListener('click', () => window.print());
 document.querySelector('#exportExcel').addEventListener('click', exportExcel);
 document.querySelector('#saveTripFile').addEventListener('click', saveTripFile);
-document.querySelector('#openTripFile').addEventListener('click', () => document.querySelector('#tripFileInput').click());
+document.querySelector('#openTripFile').addEventListener('click', () => {
+  if (supportsFileHandles()) openTripFileWithHandle();
+  else document.querySelector('#tripFileInput').click();
+});
 document.querySelector('#tripFileInput').addEventListener('change', openTripFile);
 document.querySelector('#addMember').addEventListener('click', () => {
   const trip = currentTrip();
