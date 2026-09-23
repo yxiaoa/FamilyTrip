@@ -213,7 +213,7 @@ function activityStartTime(day, index) {
     current += Number(item.duration);
   }
   const activity = day.activities[index];
-  return activity.timeLocked && activity.time ? Math.max(current, timeToMinutes(activity.time)) : current;
+  return activity?.timeLocked && activity.time ? Math.max(current, timeToMinutes(activity.time)) : current;
 }
 function gapHtml(dayIndex, insertIndex, start, end) {
   const duration = end - start;
