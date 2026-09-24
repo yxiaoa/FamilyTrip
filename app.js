@@ -378,8 +378,8 @@ function renderTripHeader() {
   const startLabel = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' }).format(range.start);
   const endLabel = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' }).format(new Date(`${trip.endDate}T00:00:00`));
   $('#tripMeta').innerHTML = `${startLabel} — ${endLabel} <span class="muted-separator">·</span> ${range.days}天${Math.max(0, range.days - 1)}晚 <span class="muted-separator">·</span> ${escapeHtml(trip.destination)}`;
-  $('#sidebarTripName').textContent = tripDisplayName(trip);
-  $('#sidebarTripFile').textContent = tripFileName(trip);
+  $('#tripFileName').textContent = tripDisplayName(trip);
+  $('#tripFilePath').textContent = tripFileName(trip);
 }
 function renderApp() {
   const trip = currentTrip();
