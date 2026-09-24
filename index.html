@@ -29,7 +29,7 @@
         <section class="summary-grid">
           <div class="summary-card"><div class="summary-icon coral">♧</div><div><span>同行人员</span><strong id="memberCount">4 人</strong><small id="memberHint">2 位成人 · 2 位儿童</small></div></div>
           <div class="summary-card"><div class="summary-icon blue">⌁</div><div><span>总路程</span><strong>42.8 km</strong><small>预计车程 2小时18分</small></div></div>
-          <div class="summary-card"><div class="summary-icon green">¥</div><div><span>预计总花费</span><strong id="totalCost">¥ 18,460</strong><small>人均 ¥ <span id="perPerson">4,615</span></small></div></div>
+          <div class="summary-card expense-summary"><div class="summary-icon green">¥</div><div><span>预计总花费</span><strong id="totalCost">¥ 18,460</strong><small>人均 <span id="perPerson">¥ 4,615</span></small></div><div class="currency-actions"><select id="displayCurrency" aria-label="费用显示币种"><option value="CNY">CNY</option><option value="JPY">JPY</option><option value="USD">USD</option><option value="HKD">HKD</option><option value="EUR">EUR</option></select><button class="link-button" type="button" id="currencySettings">汇率</button></div></div>
           <div class="summary-card"><div class="summary-icon purple">◷</div><div><span>行程完成度</span><strong>35%</strong><div class="progress"><i></i></div></div></div>
         </section>
 
@@ -53,7 +53,7 @@
         <div class="dialog-heading"><div><span class="day-label" id="dialogMode">新增安排</span><h2 id="dialogTitle">添加行程</h2></div><button class="close-dialog" type="button" id="closeActivityDialog" aria-label="关闭">×</button></div>
         <label>安排名称<input id="activityName" required maxlength="40" placeholder="例如：参观二条城"></label>
         <label>详细说明<input id="activityDetail" maxlength="80" placeholder="地点、交通或备注"></label>
-        <div class="form-grid"><label>开始时间<input id="activityStartTime" type="time" required></label><label>结束时间<input id="activityEndTime" type="time" required></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="5" value="60"></label><label>图标<input id="activityEmoji" maxlength="2" value="📍"></label><label>费用类别<select id="activityCategory"><option value="交通费">交通费</option><option value="机票">机票</option><option value="住宿费">住宿费</option><option value="餐饮费">餐饮费</option><option value="门票">门票</option><option value="其他">其他</option></select></label><label>费用金额（¥）<input id="activityCost" type="number" min="0" step="1" value="0"></label><label>计费方式<select id="activityCostMode"><option value="total">总费用</option><option value="perPerson">人均费用</option></select></label></div>
+        <div class="form-grid"><label>开始时间<input id="activityStartTime" type="time" required></label><label>结束时间<input id="activityEndTime" type="time" required></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="5" value="60"></label><label>图标<input id="activityEmoji" maxlength="2" value="📍"></label><label>费用类别<select id="activityCategory"><option value="交通费">交通费</option><option value="机票">机票</option><option value="住宿费">住宿费</option><option value="餐饮费">餐饮费</option><option value="门票">门票</option><option value="其他">其他</option></select></label><label>费用金额<input id="activityCost" type="number" min="0" step="0.01" value="0"></label><label>费用币种<select id="activityCurrency"><option value="CNY">人民币 CNY</option><option value="JPY">日元 JPY</option><option value="USD">美元 USD</option><option value="HKD">港币 HKD</option><option value="EUR">欧元 EUR</option></select></label><label>计费方式<select id="activityCostMode"><option value="total">总费用</option><option value="perPerson">人均费用</option></select></label></div>
         <div class="dialog-actions"><button class="button secondary" type="button" id="cancelActivityDialog">取消</button><button class="button primary" id="saveActivity" value="default">保存安排</button></div>
       </form>
     </dialog>
@@ -91,6 +91,14 @@
         <label>目的地<input id="newTripDestination" required maxlength="30" placeholder="例如：日本东京"></label>
         <div class="form-grid"><label>开始日期<input id="newTripStart" type="date" required></label><label>结束日期<input id="newTripEnd" type="date" required></label><label>同行人数<input id="newTripMembers" type="number" min="1" max="30" value="4" required></label></div>
         <div class="dialog-actions"><button class="button secondary" type="button" id="cancelTripDialog">取消</button><button class="button primary" type="submit">创建行程</button></div>
+      </form>
+    </dialog>
+    <dialog id="currencyDialog" class="activity-dialog currency-dialog">
+      <form method="dialog" id="currencyForm">
+        <div class="dialog-heading"><div><span class="day-label">费用换算</span><h2>设置汇率</h2></div><button class="close-dialog" type="button" id="closeCurrencyDialog" aria-label="关闭">×</button></div>
+        <p class="dialog-help">汇率用于折算预计总花费：1 单位外币可兑换多少人民币（CNY）。原始费用金额不会被修改。</p>
+        <div class="form-grid currency-rate-grid"><label>日元 JPY<input id="rateJPY" type="number" min="0.0001" step="0.0001" required></label><label>美元 USD<input id="rateUSD" type="number" min="0.0001" step="0.0001" required></label><label>港币 HKD<input id="rateHKD" type="number" min="0.0001" step="0.0001" required></label><label>欧元 EUR<input id="rateEUR" type="number" min="0.0001" step="0.0001" required></label></div>
+        <div class="dialog-actions"><button class="button secondary" type="button" id="cancelCurrencyDialog">取消</button><button class="button primary" type="submit">保存汇率</button></div>
       </form>
     </dialog>
     <div class="toast" id="toast"></div>
