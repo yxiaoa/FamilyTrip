@@ -233,6 +233,21 @@ function openEditTripDialog() {
 function formatTime(minutes) {
   return `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
+function endTimeFor(startTime, duration) {
+  return formatTime(timeToMinutes(startTime) + Number(duration));
+}
+function syncActivityEndTime() {
+  const startTime = $('#activityStartTime').value;
+  const duration = Number($('#activityDuration').value);
+  if (startTime && Number.isInteger(duration) && duration >= 10) $('#activityEndTime').value = endTimeFor(startTime, duration);
+}
+function syncActivityDuration() {
+  const startTime = $('#activityStartTime').value;
+  const endTime = $('#activityEndTime').value;
+  if (!startTime || !endTime) return;
+  const duration = timeToMinutes(endTime) - timeToMinutes(startTime);
+  if (duration >= 10 && duration <= 720) $('#activityDuration').value = duration;
+}
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 }
@@ -379,13 +394,19 @@ function openEditor(index = -1) {
   $('#activityName').value = activity.title; $('#activityDetail').value = activity.detail;
   $('#activityEmoji').value = activity.emoji; $('#activityCategory').value = activity.category || '其他'; $('#activityCost').value = activity.cost; $('#activityCostMode').value = activity.costMode || 'total'; $('#activityDuration').value = activity.duration;
   $('#activityStartTime').value = index >= 0 && activity.timeLocked ? activity.time : newActivityTime || formatTime(index >= 0 ? activityStartTime(currentTrip().days[selectedDay], index) : activityStartTime(currentTrip().days[selectedDay], currentTrip().days[selectedDay].activities.length));
+  syncActivityEndTime();
   dialog.showModal(); $('#activityName').focus();
 }
+['activityStartTime', 'activityDuration'].forEach(id => document.querySelector(`#${id}`).addEventListener('change', syncActivityEndTime));
+document.querySelector('#activityEndTime').addEventListener('change', syncActivityDuration);
 form.addEventListener('submit', event => {
   event.preventDefault();
   const duration = Number($('#activityDuration').value);
   if (!Number.isInteger(duration) || duration < 10 || duration > 720) return showToast('时长需为 10 - 720 分钟的整数');
   const startTime = $('#activityStartTime').value;
+  const endTime = $('#activityEndTime').value;
+  if (!startTime || !endTime || timeToMinutes(endTime) <= timeToMinutes(startTime)) return showToast('结束时间需晚于开始时间，暂不支持跨天安排');
+  if (timeToMinutes(endTime) - timeToMinutes(startTime) !== duration) return showToast('请修改结束时间或时长，使两者保持一致');
   const activity = normalizeActivity({ title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), emoji: $('#activityEmoji').value.trim() || '📍', category: $('#activityCategory').value, cost: Number($('#activityCost').value) || 0, costMode: $('#activityCostMode').value, duration, time: startTime, timeLocked: Boolean(startTime) });
   if (!activity.title) return showToast('请填写安排名称');
   const day = currentTrip().days[selectedDay];
