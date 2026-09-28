@@ -13,7 +13,8 @@ const seedDays = [
   ...['岚山竹林 · 渡月桥', '伏见稻荷 · 宇治抹茶', '奈良一日 · 与鹿相遇', '返程 · 带着春色回家'].map(title => ({ title, startTime: '09:00', activities: [] }))
 ];
 const stateKey = 'familyTripPlanner';
-const CURRENT_SCHEMA_VERSION = 5;
+const CURRENT_SCHEMA_VERSION = 6;
+const builtInCategories = ['交通费', '机票', '住宿费', '餐饮费', '门票', '其他'];
 const supportedCurrencies = ['CNY', 'JPY', 'USD', 'HKD', 'EUR'];
 const defaultExchangeRates = { CNY: 1, JPY: 0.05, USD: 7.2, HKD: 0.92, EUR: 7.8 };
 const tripHandleDatabaseName = 'familyTripFileHandles';
@@ -59,6 +60,8 @@ const editTripDialog = document.querySelector('#editTripDialog');
 const editTripForm = document.querySelector('#editTripForm');
 const currencyDialog = document.querySelector('#currencyDialog');
 const currencyForm = document.querySelector('#currencyForm');
+const categoryDialog = document.querySelector('#categoryDialog');
+const categoryForm = document.querySelector('#categoryForm');
 const $ = selector => document.querySelector(selector);
 
 function persist() { localStorage.setItem(stateKey, JSON.stringify({ ...state, storageSchemaVersion: CURRENT_SCHEMA_VERSION })); }
@@ -143,6 +146,7 @@ function migrateTripFile(fileData) {
     trip.exchangeRates = trip.exchangeRates || defaultExchangeRates;
     trip.displayCurrency = trip.displayCurrency || 'CNY';
   }
+  if (sourceVersion < 6) trip.customCategories = [];
   return { trip: normalizeTrip({ ...trip, id: `trip-${Date.now()}` }), migratedFrom: sourceVersion, schemaVersion: CURRENT_SCHEMA_VERSION };
 }
 function defaultFamilyMembers(count) {
@@ -162,7 +166,8 @@ function normalizeTrip(trip) {
   const exchangeRates = Object.fromEntries(supportedCurrencies.map(currency => [currency, currency === 'CNY' ? 1 : Math.max(0.0001, Number(trip.exchangeRates?.[currency]) || defaultExchangeRates[currency])]));
   const displayCurrency = supportedCurrencies.includes(trip.displayCurrency) ? trip.displayCurrency : 'CNY';
   const todos = Array.isArray(trip.todos) ? trip.todos.map((todo, index) => normalizeTodo(todo, index)) : defaultTodos();
-  return { ...trip, members: familyMembers.length, familyMembers, exchangeRates, displayCurrency, todos, days: days.map((day, index) => ({ ...day, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities.map(normalizeActivity) : [], alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(normalizeDayAlternative) : [] })) };
+  const customCategories = [...new Set((Array.isArray(trip.customCategories) ? trip.customCategories : []).map(category => String(category).trim()).filter(category => category && !builtInCategories.includes(category)))].slice(0, 30);
+  return { ...trip, members: familyMembers.length, familyMembers, exchangeRates, displayCurrency, todos, customCategories, days: days.map((day, index) => ({ ...day, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities.map(normalizeActivity) : [], alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(normalizeDayAlternative) : [] })) };
 }
 function defaultTodos() {
   return [
@@ -213,6 +218,35 @@ function activityTotalCny(activity, trip) {
 function formatCurrency(amount, currency) {
   const digits = currency === 'JPY' ? 0 : 2;
   return new Intl.NumberFormat('zh-CN', { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(amount);
+}
+function renderCategoryOptions(selectedCategory = '') {
+  const categories = [...builtInCategories, ...currentTrip().customCategories];
+  $('#activityCategory').innerHTML = categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+  if (categories.includes(selectedCategory)) $('#activityCategory').value = selectedCategory;
+}
+function renderCategoryList() {
+  const trip = currentTrip();
+  $('#categoryList').innerHTML = trip.customCategories.length
+    ? trip.customCategories.map((category, index) => `<div class="category-row"><span>${escapeHtml(category)}</span><button type="button" class="link-button" data-remove-category="${index}">删除</button></div>`).join('')
+    : '<p class="category-empty">暂无自定义类别</p>';
+  $('#categoryList').querySelectorAll('[data-remove-category]').forEach(button => button.addEventListener('click', () => {
+    const index = Number(button.dataset.removeCategory);
+    const category = trip.customCategories[index];
+    const activityUsesCategory = activity => activity.category === category
+      || activity.alternatives?.some(alternative => activityUsesCategory(alternative));
+    const inUse = trip.days.some(day => day.activities.some(activityUsesCategory)
+      || day.alternatives.some(option => option.activities.some(activityUsesCategory)));
+    if (inUse) return showToast(`“${category}”已被安排使用，暂不能删除`);
+    trip.customCategories.splice(index, 1);
+    persist();
+    renderCategoryList();
+    renderCategoryOptions($('#activityCategory').value);
+  }));
+}
+function openCategoryDialog() {
+  renderCategoryList();
+  categoryDialog.showModal();
+  $('#newCategoryName').focus();
 }
 function renderMembers() {
   const trip = currentTrip();
@@ -547,7 +581,7 @@ function openEditor(index = -1) {
   $('#dialogMode').textContent = addingActivityAlternative ? '新增活动备用方案' : (index >= 0 ? '编辑安排' : '新增安排');
   $('#dialogTitle').textContent = index >= 0 ? activity.title : '添加行程';
   $('#activityName').value = activity.title; $('#activityDetail').value = activity.detail;
-  $('#activityCategory').value = activity.category || '其他'; $('#activityCost').value = activity.cost; $('#activityCurrency').value = activity.currency || 'CNY'; $('#activityCostMode').value = activity.costMode || 'total'; $('#activityDuration').value = activity.duration;
+  renderCategoryOptions(activity.category || '其他'); $('#activityCost').value = activity.cost; $('#activityCurrency').value = activity.currency || 'CNY'; $('#activityCostMode').value = activity.costMode || 'total'; $('#activityDuration').value = activity.duration;
   $('#activityStartTime').value = index >= 0 && activity.timeLocked ? activity.time : newActivityTime || formatTime(index >= 0 ? activityStartTime(currentTrip().days[selectedDay], index) : activityStartTime(currentTrip().days[selectedDay], currentTrip().days[selectedDay].activities.length));
   syncActivityEndTime();
   dialog.showModal(); $('#activityName').focus();
@@ -782,6 +816,22 @@ currencyForm.addEventListener('submit', event => {
   updateCost();
   showToast('汇率已更新，预计总花费已重新折算');
 });
+$('#manageCategories').addEventListener('click', openCategoryDialog);
+$('#addCategory').addEventListener('click', () => {
+  const name = $('#newCategoryName').value.trim();
+  const trip = currentTrip();
+  if (!name) return showToast('请输入费用类别名称');
+  if (builtInCategories.includes(name) || trip.customCategories.includes(name)) return showToast('该费用类别已存在');
+  trip.customCategories.push(name);
+  persist();
+  $('#newCategoryName').value = '';
+  renderCategoryList();
+  renderCategoryOptions(name);
+  showToast(`已添加费用类别“${name}”`);
+});
+$('#doneCategory').addEventListener('click', () => categoryDialog.close());
+$('#closeCategoryDialog').addEventListener('click', () => categoryDialog.close());
+categoryForm.addEventListener('submit', event => { event.preventDefault(); categoryDialog.close(); });
 document.querySelector('#editTripButton').addEventListener('click', openEditTripDialog);
 ['editTripStart', 'editTripEnd'].forEach(id => document.querySelector(`#${id}`).addEventListener('change', updateEditTripDaysHint));
 ['closeTripDialog', 'cancelTripDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => tripDialog.close()));
@@ -843,4 +893,5 @@ membersDialog.addEventListener('cancel', event => { event.preventDefault(); memb
 planDialog.addEventListener('cancel', event => { event.preventDefault(); addingDayAlternativeIndex = -1; planDialog.close(); });
 editTripDialog.addEventListener('cancel', event => { event.preventDefault(); editTripDialog.close(); });
 currencyDialog.addEventListener('cancel', event => { event.preventDefault(); currencyDialog.close(); });
+categoryDialog.addEventListener('cancel', event => { event.preventDefault(); categoryDialog.close(); });
 renderApp();

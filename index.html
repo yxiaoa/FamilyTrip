@@ -56,7 +56,7 @@
         <div class="dialog-heading"><div><span class="day-label" id="dialogMode">新增安排</span><h2 id="dialogTitle">添加行程</h2></div><button class="close-dialog" type="button" id="closeActivityDialog" aria-label="关闭">×</button></div>
         <label>安排名称<input id="activityName" required maxlength="40" placeholder="例如：参观二条城"></label>
         <label>详细说明<input id="activityDetail" maxlength="80" placeholder="地点、交通或备注"></label>
-        <div class="form-grid"><label>开始时间<input id="activityStartTime" type="time" required></label><label>结束时间<input id="activityEndTime" type="time" required></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="5" value="60"></label><label>费用类别<select id="activityCategory"><option value="交通费">交通费</option><option value="机票">机票</option><option value="住宿费">住宿费</option><option value="餐饮费">餐饮费</option><option value="门票">门票</option><option value="其他">其他</option></select></label><label>费用金额<input id="activityCost" type="number" min="0" step="0.01" value="0"></label><label>费用币种<select id="activityCurrency"><option value="CNY">人民币 CNY</option><option value="JPY">日元 JPY</option><option value="USD">美元 USD</option><option value="HKD">港币 HKD</option><option value="EUR">欧元 EUR</option></select></label><label>计费方式<select id="activityCostMode"><option value="total">总费用</option><option value="perPerson">人均费用</option></select></label></div>
+        <div class="form-grid"><label>开始时间<input id="activityStartTime" type="time" required></label><label>结束时间<input id="activityEndTime" type="time" required></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="5" value="60"></label><label>费用类别<select id="activityCategory"></select><button class="inline-link" type="button" id="manageCategories">管理类别</button></label><label>费用金额<input id="activityCost" type="number" min="0" step="0.01" value="0"></label><label>费用币种<select id="activityCurrency"><option value="CNY">人民币 CNY</option><option value="JPY">日元 JPY</option><option value="USD">美元 USD</option><option value="HKD">港币 HKD</option><option value="EUR">欧元 EUR</option></select></label><label>计费方式<select id="activityCostMode"><option value="total">总费用</option><option value="perPerson">人均费用</option></select></label></div>
         <div class="dialog-actions"><button class="button secondary" type="button" id="cancelActivityDialog">取消</button><button class="button primary" id="saveActivity" value="default">保存安排</button></div>
       </form>
     </dialog>
@@ -102,6 +102,15 @@
         <p class="dialog-help">汇率用于折算预计总花费：1 单位外币可兑换多少人民币（CNY）。原始费用金额不会被修改。</p>
         <div class="form-grid currency-rate-grid"><label>日元 JPY<input id="rateJPY" type="number" min="0.0001" step="0.0001" required></label><label>美元 USD<input id="rateUSD" type="number" min="0.0001" step="0.0001" required></label><label>港币 HKD<input id="rateHKD" type="number" min="0.0001" step="0.0001" required></label><label>欧元 EUR<input id="rateEUR" type="number" min="0.0001" step="0.0001" required></label></div>
         <div class="dialog-actions"><button class="button secondary" type="button" id="cancelCurrencyDialog">取消</button><button class="button primary" type="submit">保存汇率</button></div>
+      </form>
+    </dialog>
+    <dialog id="categoryDialog" class="activity-dialog category-dialog">
+      <form method="dialog" id="categoryForm">
+        <div class="dialog-heading"><div><span class="day-label">费用设置</span><h2>管理费用类别</h2></div><button class="close-dialog" type="button" id="closeCategoryDialog" aria-label="关闭">×</button></div>
+        <p class="dialog-help">新增类别只对当前行程生效，之后添加安排时会出现在费用类别列表中。</p>
+        <div class="category-add-row"><input id="newCategoryName" maxlength="20" placeholder="例如：购物、保险、停车"><button class="button secondary" type="button" id="addCategory">＋ 添加</button></div>
+        <div id="categoryList" class="category-list"></div>
+        <div class="dialog-actions"><button class="button primary" type="button" id="doneCategory">完成</button></div>
       </form>
     </dialog>
     <div class="toast" id="toast"></div>

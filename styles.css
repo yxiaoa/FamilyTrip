@@ -22,6 +22,7 @@
 .activity-main{gap:0}.day-column .activity-meta{margin-left:0}
 .day-column .time{padding-top:8px;text-align:right;line-height:1.25}
 .day-column .time small{display:block;margin-top:3px;color:#aaa;font-size:9px;white-space:nowrap}
+.inline-link{display:block;border:0;background:none;color:var(--coral);padding:4px 0 0;font:10px inherit;text-align:left;cursor:pointer}.category-dialog{max-width:520px}.category-add-row{display:flex;gap:8px;margin:15px 0}.category-add-row input{flex:1;border:1px solid var(--line);border-radius:6px;padding:9px 10px;font:12px inherit}.category-list{border-top:1px solid var(--line)}.category-row{display:flex;justify-content:space-between;align-items:center;padding:10px 2px;border-bottom:1px solid #f4f1f0;font-size:12px}.category-empty{color:#aaa;font-size:11px;text-align:center;padding:12px 0}
 .day-column .activity-card{display:block;position:relative;padding:9px 40px 9px 10px}
 .day-column .activity-main{display:block}
 .day-column .activity-main>div{padding-right:22px}
