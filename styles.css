@@ -20,6 +20,21 @@
 .expense-summary{position:relative}.currency-actions{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px}.currency-actions select{border:1px solid var(--line);border-radius:5px;background:#fff;color:#777;font:10px inherit;padding:4px 5px}.currency-actions .link-button{padding:0}.currency-dialog{max-width:520px}.currency-rate-grid label{min-width:0}
 .activity-card[draggable="true"]{cursor:grab}.activity-card[draggable="true"]:active{cursor:grabbing}.activity-card.is-dragging{opacity:.45}.activity-card.is-drag-over{border-color:var(--coral);box-shadow:0 0 0 2px #ed765f22}.day-column.is-drag-over{background:#fffaf8;border-radius:8px}
 .activity-main{gap:0}.day-column .activity-meta{margin-left:0}
+.day-column .time{padding-top:8px;text-align:right;line-height:1.25}
+.day-column .time small{display:block;margin-top:3px;color:#aaa;font-size:9px;white-space:nowrap}
+.day-column .activity-card{display:block;position:relative;padding:9px 40px 9px 10px}
+.day-column .activity-main{display:block}
+.day-column .activity-main>div{padding-right:22px}
+.day-column .activity-meta{display:block;margin:5px 0 0;text-align:left}
+.day-column .activity-meta strong{display:block;color:#75727b;font-size:10px;font-weight:500}
+.activity-menu{position:absolute;top:6px;right:6px;z-index:2}
+.activity-menu summary{display:grid;width:24px;height:24px;place-items:center;border:1px solid var(--line);border-radius:5px;background:#fff;color:#777;font-size:17px;line-height:1;cursor:pointer;list-style:none}
+.activity-menu summary::-webkit-details-marker{display:none}
+.activity-menu[open]{z-index:5}
+.activity-menu-items{position:absolute;top:27px;right:0;display:grid;min-width:132px;gap:2px;padding:4px;border:1px solid var(--line);border-radius:6px;background:#fff;box-shadow:0 6px 18px #30251f20}
+.activity-menu-items button{padding:7px 9px;border:0;border-radius:4px;background:#fff;color:#555;text-align:left;font:inherit;font-size:11px;cursor:pointer}
+.activity-menu-items button:hover{background:#fff2ee;color:var(--coral-dark)}
+.activity-menu-items button[data-action="delete"]{color:#c45c4c}
 .workspace>.right-column .todo-card{display:block;grid-column:1/-1;padding:15px;background:#fffaf7;border-color:#f8e8e2}
 .todo-heading{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .todo-heading h3{margin:0;font-size:13px}
