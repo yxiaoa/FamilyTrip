@@ -18,6 +18,8 @@
 @media (max-width:900px){.main-content{padding-left:24px;padding-right:24px}.page-heading{align-items:flex-start;flex-direction:column;gap:18px}.heading-actions{justify-content:flex-start}.topbar-context{gap:15px}.topbar-brand{font-size:15px}.crumb{display:none}}
 @media (max-width:560px){.main-content{padding-left:16px;padding-right:16px}.topbar{height:auto;min-height:54px;align-items:flex-start;padding:13px 0;gap:10px}.topbar-context{min-width:0}.topbar-context strong{display:block;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.save-state{white-space:nowrap;font-size:10px}.heading-actions{gap:8px}.heading-actions .button{padding:9px 11px}.new-trip-button{order:-1}}
 .expense-summary{position:relative}.currency-actions{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px}.currency-actions select{border:1px solid var(--line);border-radius:5px;background:#fff;color:#777;font:10px inherit;padding:4px 5px}.currency-actions .link-button{padding:0}.currency-dialog{max-width:520px}.currency-rate-grid label{min-width:0}
+.activity-card[draggable="true"]{cursor:grab}.activity-card[draggable="true"]:active{cursor:grabbing}.activity-card.is-dragging{opacity:.45}.activity-card.is-drag-over{border-color:var(--coral);box-shadow:0 0 0 2px #ed765f22}.day-column.is-drag-over{background:#fffaf8;border-radius:8px}
+.activity-main{gap:0}.day-column .activity-meta{margin-left:0}
 .workspace>.right-column .todo-card{display:block;grid-column:1/-1;padding:15px;background:#fffaf7;border-color:#f8e8e2}
 .todo-heading{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .todo-heading h3{margin:0;font-size:13px}

@@ -3,11 +3,11 @@ const seedDays = [
     title: '抵达京都 · 古都初见',
     startTime: '09:30',
     activities: [
-      { time: '09:30', title: '抵达关西机场', detail: '机场接送 · 约 1小时20分', emoji: '🛬', cost: 620, duration: 80 },
-      { time: '11:10', title: '前往京都站', detail: '包车 · 约 1小时20分', emoji: '🚐', cost: 360, duration: 80 },
-      { time: '12:40', title: '午餐 · 京都拉面小路', detail: '京都站 10F · 预计 1小时', emoji: '🍜', cost: 480, duration: 60 },
-      { time: '14:00', title: '入住 · 四季京都酒店', detail: '东山区 · 2间家庭房', emoji: '🏨', cost: 8900, duration: 30 },
-      { time: '15:00', title: '清水寺与二年坂', detail: '步行游览 · 约 2小时', emoji: '⛩️', cost: 1600, duration: 120 }
+      { time: '09:30', title: '抵达关西机场', detail: '机场接送 · 约 1小时20分', cost: 620, duration: 80 },
+      { time: '11:10', title: '前往京都站', detail: '包车 · 约 1小时20分', cost: 360, duration: 80 },
+      { time: '12:40', title: '午餐 · 京都拉面小路', detail: '京都站 10F · 预计 1小时', cost: 480, duration: 60 },
+      { time: '14:00', title: '入住 · 四季京都酒店', detail: '东山区 · 2间家庭房', cost: 8900, duration: 30 },
+      { time: '15:00', title: '清水寺与二年坂', detail: '步行游览 · 约 2小时', cost: 1600, duration: 120 }
     ]
   },
   ...['岚山竹林 · 渡月桥', '伏见稻荷 · 宇治抹茶', '奈良一日 · 与鹿相遇', '返程 · 带着春色回家'].map(title => ({ title, startTime: '09:00', activities: [] }))
@@ -381,10 +381,10 @@ function renderTimeline() {
       const gap = gapHtml(dayIndex, index, previousEnd, start);
       previousEnd = start + Number(activity.duration);
       const alternativeButtons = activity.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-action="select-activity-alternative" data-alternative-index="${alternativeIndex}">备选：${escapeHtml(alternative.title)}</button>`).join('');
-      return `${gap}<div class="activity"><div class="time">${formatTime(start)}</div><span class="activity-dot"></span>
-        <div class="activity-card" data-day="${dayIndex}" data-index="${index}"><div class="activity-main"><span class="activity-emoji">${escapeHtml(activity.emoji)}</span><div><h4>${escapeHtml(activity.title)}</h4><p>${escapeHtml(activity.detail || '暂无备注')}</p></div></div>
-          <div class="activity-meta"><strong>${formatCurrency(activityTotalForTrip(activity, trip), activity.currency)}</strong><small>${escapeHtml(activity.category)} · ${activity.costMode === 'perPerson' ? '按权重' : '总额'} · ${activity.duration} 分钟</small></div>
-        <div class="activity-controls"><button data-action="up" title="上移">↑</button><button data-action="down" title="下移">↓</button><button data-action="edit" title="编辑">✎</button><button data-action="add-alternative" title="添加活动备用方案">备选</button><button data-action="delete" title="删除">×</button></div>
+      return `${gap}<div class="activity"><div class="time"><span>${formatTime(start)}</span><small>${activity.duration}分钟</small></div><span class="activity-dot"></span>
+        <div class="activity-card" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="拖动安排：${escapeHtml(activity.title)}"><div class="activity-main"><div><h4>${escapeHtml(activity.title)}</h4>${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
+          <div class="activity-meta"><strong>${escapeHtml(activity.category)} ${formatCurrency(activityTotalForTrip(activity, trip), activity.currency)}</strong></div>
+        <details class="activity-menu"><summary aria-label="更多操作" title="更多操作">⋮</summary><div class="activity-menu-items"><button data-action="up">上移</button><button data-action="down">下移</button><button data-action="edit">编辑</button><button data-action="add-alternative">添加备用安排</button><button data-action="delete">删除</button></div></details>
         ${alternativeButtons ? `<div class="activity-alternatives"><span>备用方案：</span>${alternativeButtons}</div>` : ''}</div></div>`;
     }).join('') : '<div class="empty-state">暂无安排</div>';
     const date = new Date(range.start);
@@ -396,7 +396,10 @@ function renderTimeline() {
     </section>`;
   }).join('');
   daysBoard.querySelectorAll('.activity-card, .day-plan-actions [data-action], .schedule-gap [data-action], .day-add-button').forEach(card => card.addEventListener('click', event => {
-    const action = event.target.dataset.action;
+    const actionElement = event.target.closest('[data-action]');
+    const action = actionElement?.dataset.action;
+    if (!action) return;
+    card.querySelector('.activity-menu')?.removeAttribute('open');
     const dayIndex = Number(card.dataset.day);
     const index = Number(card.dataset.index);
     const activities = trip.days[dayIndex].activities;
@@ -404,10 +407,10 @@ function renderTimeline() {
       selectedDay = dayIndex; insertingActivityIndex = activities.length; newActivityTime = ''; openEditor(); return;
     }
     if (action === 'insert-activity') {
-      selectedDay = dayIndex; insertingActivityIndex = Number(event.target.dataset.insertIndex); newActivityTime = event.target.dataset.insertTime; openEditor(); return;
+      selectedDay = dayIndex; insertingActivityIndex = Number(actionElement.dataset.insertIndex); newActivityTime = actionElement.dataset.insertTime; openEditor(); return;
     }
     if (action === 'select-day-alternative') {
-      const alternativeIndex = Number(event.target.dataset.alternativeIndex);
+      const alternativeIndex = Number(actionElement.dataset.alternativeIndex);
       const alternative = trip.days[dayIndex].alternatives[alternativeIndex];
       [trip.days[dayIndex].activities, alternative.activities] = [alternative.activities, trip.days[dayIndex].activities];
       persist(); renderTimeline(); updateCost(); showToast(`已切换到整日备用方案“${alternative.name}”，原方案已保留为备用`);
@@ -421,7 +424,7 @@ function renderTimeline() {
       return;
     }
     if (action === 'select-activity-alternative') {
-      const alternativeIndex = Number(event.target.dataset.alternativeIndex);
+      const alternativeIndex = Number(actionElement.dataset.alternativeIndex);
       const activity = activities[index];
       const primary = { ...activity, alternatives: [] };
       const alternative = activity.alternatives[alternativeIndex];
@@ -439,11 +442,76 @@ function renderTimeline() {
     if (action === 'down' && index < activities.length - 1) [activities[index], activities[index + 1]] = [activities[index + 1], activities[index]];
     if (action === 'up' || action === 'down') { persist(); renderTimeline(); showToast('顺序已调整，后续时间自动顺延'); }
   }));
+  let draggedActivity = null;
+  daysBoard.querySelectorAll('.activity-card').forEach(card => {
+    card.addEventListener('dragstart', event => {
+      draggedActivity = { dayIndex: Number(card.dataset.day), activityIndex: Number(card.dataset.index) };
+      card.classList.add('is-dragging');
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', 'activity');
+    });
+    card.addEventListener('dragend', () => {
+      draggedActivity = null;
+      card.classList.remove('is-dragging');
+      daysBoard.querySelectorAll('.is-drag-over').forEach(target => target.classList.remove('is-drag-over'));
+    });
+    card.addEventListener('dragover', event => {
+      if (!draggedActivity) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      card.classList.add('is-drag-over');
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('is-drag-over'));
+    card.addEventListener('drop', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      card.classList.remove('is-drag-over');
+      if (!draggedActivity) return;
+      const targetDayIndex = Number(card.dataset.day);
+      const targetIndex = Number(card.dataset.index);
+      moveActivity(draggedActivity.dayIndex, draggedActivity.activityIndex, targetDayIndex, targetIndex);
+      draggedActivity = null;
+    });
+  });
+  daysBoard.querySelectorAll('.day-column').forEach(column => {
+    column.addEventListener('dragover', event => {
+      if (!draggedActivity) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      column.classList.add('is-drag-over');
+    });
+    column.addEventListener('dragleave', event => {
+      if (!column.contains(event.relatedTarget)) column.classList.remove('is-drag-over');
+    });
+    column.addEventListener('drop', event => {
+      event.preventDefault();
+      column.classList.remove('is-drag-over');
+      if (!draggedActivity) return;
+      moveActivity(draggedActivity.dayIndex, draggedActivity.activityIndex, Number(column.dataset.day), trip.days[Number(column.dataset.day)].activities.length);
+      draggedActivity = null;
+    });
+  });
   daysBoard.querySelectorAll('[data-day-start]').forEach(input => input.addEventListener('change', event => {
     const dayIndex = Number(event.target.dataset.dayStart);
     trip.days[dayIndex].startTime = event.target.value || '09:00';
     persist(); renderTimeline(); showToast('开始时间已更新，全天行程自动顺延');
   }));
+}
+function moveActivity(sourceDayIndex, sourceIndex, targetDayIndex, targetIndex) {
+  const trip = currentTrip();
+  const sourceActivities = trip.days[sourceDayIndex]?.activities;
+  const targetActivities = trip.days[targetDayIndex]?.activities;
+  if (!sourceActivities || !targetActivities || !sourceActivities[sourceIndex]) return;
+  if (sourceDayIndex === targetDayIndex && (targetIndex === sourceIndex || targetIndex === sourceIndex + 1)) return;
+  const [activity] = sourceActivities.splice(sourceIndex, 1);
+  activity.timeLocked = false;
+  delete activity.time;
+  const adjustedIndex = sourceDayIndex === targetDayIndex && targetIndex > sourceIndex ? targetIndex - 1 : targetIndex;
+  targetActivities.splice(Math.max(0, Math.min(adjustedIndex, targetActivities.length)), 0, activity);
+  persist();
+  renderTimeline();
+  updateCost();
+  showToast(sourceDayIndex === targetDayIndex ? '安排顺序已调整，后续时间自动顺延' : '安排已移动到其他天，时间已自动顺延');
 }
 function updateCost() {
   const trip = currentTrip();
@@ -475,11 +543,11 @@ function renderApp() {
 }
 function openEditor(index = -1) {
   editingIndex = index;
-  const activity = index >= 0 ? currentTrip().days[selectedDay].activities[index] : { title: '', detail: '', emoji: '📍', category: '其他', cost: 0, costMode: 'total', duration: 60 };
+  const activity = index >= 0 ? currentTrip().days[selectedDay].activities[index] : { title: '', detail: '', category: '其他', cost: 0, costMode: 'total', duration: 60 };
   $('#dialogMode').textContent = addingActivityAlternative ? '新增活动备用方案' : (index >= 0 ? '编辑安排' : '新增安排');
   $('#dialogTitle').textContent = index >= 0 ? activity.title : '添加行程';
   $('#activityName').value = activity.title; $('#activityDetail').value = activity.detail;
-  $('#activityEmoji').value = activity.emoji; $('#activityCategory').value = activity.category || '其他'; $('#activityCost').value = activity.cost; $('#activityCurrency').value = activity.currency || 'CNY'; $('#activityCostMode').value = activity.costMode || 'total'; $('#activityDuration').value = activity.duration;
+  $('#activityCategory').value = activity.category || '其他'; $('#activityCost').value = activity.cost; $('#activityCurrency').value = activity.currency || 'CNY'; $('#activityCostMode').value = activity.costMode || 'total'; $('#activityDuration').value = activity.duration;
   $('#activityStartTime').value = index >= 0 && activity.timeLocked ? activity.time : newActivityTime || formatTime(index >= 0 ? activityStartTime(currentTrip().days[selectedDay], index) : activityStartTime(currentTrip().days[selectedDay], currentTrip().days[selectedDay].activities.length));
   syncActivityEndTime();
   dialog.showModal(); $('#activityName').focus();
@@ -502,7 +570,7 @@ form.addEventListener('submit', event => {
   const endTime = $('#activityEndTime').value;
   if (!startTime || !endTime || timeToMinutes(endTime) <= timeToMinutes(startTime)) return showToast('结束时间需晚于开始时间，暂不支持跨天安排');
   if (timeToMinutes(endTime) - timeToMinutes(startTime) !== duration) return showToast('请修改结束时间或时长，使两者保持一致');
-  const activity = normalizeActivity({ title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), emoji: $('#activityEmoji').value.trim() || '📍', category: $('#activityCategory').value, cost: Number($('#activityCost').value) || 0, currency: $('#activityCurrency').value, costMode: $('#activityCostMode').value, duration, time: startTime, timeLocked: Boolean(startTime) });
+  const activity = normalizeActivity({ title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), category: $('#activityCategory').value, cost: Number($('#activityCost').value) || 0, currency: $('#activityCurrency').value, costMode: $('#activityCostMode').value, duration, time: startTime, timeLocked: Boolean(startTime) });
   if (!activity.title) return showToast('请填写安排名称');
   const day = currentTrip().days[selectedDay];
   const suggestedTime = formatTime(editingIndex >= 0 ? activityStartTime(day, editingIndex) : (newActivityTime ? timeToMinutes(newActivityTime) : activityStartTime(day, day.activities.length)));
