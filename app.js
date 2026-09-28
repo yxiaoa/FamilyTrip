@@ -13,7 +13,7 @@ const seedDays = [
   ...['岚山竹林 · 渡月桥', '伏见稻荷 · 宇治抹茶', '奈良一日 · 与鹿相遇', '返程 · 带着春色回家'].map(title => ({ title, startTime: '09:00', activities: [] }))
 ];
 const stateKey = 'familyTripPlanner';
-const CURRENT_SCHEMA_VERSION = 4;
+const CURRENT_SCHEMA_VERSION = 5;
 const supportedCurrencies = ['CNY', 'JPY', 'USD', 'HKD', 'EUR'];
 const defaultExchangeRates = { CNY: 1, JPY: 0.05, USD: 7.2, HKD: 0.92, EUR: 7.8 };
 const tripHandleDatabaseName = 'familyTripFileHandles';
@@ -161,7 +161,20 @@ function normalizeTrip(trip) {
   const familyMembers = (Array.isArray(trip.familyMembers) && trip.familyMembers.length ? trip.familyMembers : defaultFamilyMembers(members)).map(normalizeMember);
   const exchangeRates = Object.fromEntries(supportedCurrencies.map(currency => [currency, currency === 'CNY' ? 1 : Math.max(0.0001, Number(trip.exchangeRates?.[currency]) || defaultExchangeRates[currency])]));
   const displayCurrency = supportedCurrencies.includes(trip.displayCurrency) ? trip.displayCurrency : 'CNY';
-  return { ...trip, members: familyMembers.length, familyMembers, exchangeRates, displayCurrency, days: days.map((day, index) => ({ ...day, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities.map(normalizeActivity) : [], alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(normalizeDayAlternative) : [] })) };
+  const todos = Array.isArray(trip.todos) ? trip.todos.map((todo, index) => normalizeTodo(todo, index)) : defaultTodos();
+  return { ...trip, members: familyMembers.length, familyMembers, exchangeRates, displayCurrency, todos, days: days.map((day, index) => ({ ...day, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities.map(normalizeActivity) : [], alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(normalizeDayAlternative) : [] })) };
+}
+function defaultTodos() {
+  return [
+    '行程单、注意事项记录、任务卡', '请假', '预订车票 / 机票（确认行李额）',
+    '确认手提与托运行李限额', '预订住宿', '准备采购旅行用品',
+    '出国准备：签证、换外币、购买保险', '安装地图、交通、翻译 App',
+    '预订门票', '安排接送站 / 机场', '行前检查：水电气、证件、停车',
+    '记账并补充完整行程', '出国准备：了解退税', '记录费用，整理纪念品与照片'
+  ].map((text, index) => normalizeTodo({ text }, index));
+}
+function normalizeTodo(todo, index) {
+  return { id: todo.id || `todo-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`, text: String(todo.text || '').trim(), completed: todo.completed === true };
 }
 function normalizeMember(member, index) {
   const age = member.age === null || member.age === '' ? null : Number(member.age);
@@ -205,6 +218,55 @@ function renderMembers() {
   const trip = currentTrip();
   const colors = ['orange', 'blue-bg', 'yellow', 'pink'];
   $('#memberList').innerHTML = trip.familyMembers.map((member, index) => `<div class="member-row"><span class="member-avatar ${colors[index % colors.length]}">${escapeHtml(member.name.slice(0, 1))}</span><div><strong>${escapeHtml(member.name)}</strong><small>${member.role}${member.age !== null ? ` · ${member.age}岁` : ''}</small></div><span class="check">✓</span></div>`).join('');
+}
+function renderTodos() {
+  const todos = currentTrip().todos;
+  const completed = todos.filter(todo => todo.completed).length;
+  $('#todoProgress').textContent = `${completed} / ${todos.length} 已完成`;
+  $('#todoList').innerHTML = todos.map(todo => `<li class="todo-item${todo.completed ? ' is-complete' : ''}" data-todo-id="${escapeHtml(todo.id)}"><label class="todo-check"><input type="checkbox" data-todo-complete ${todo.completed ? 'checked' : ''} aria-label="标记完成：${escapeHtml(todo.text)}"><span>${escapeHtml(todo.text)}</span></label><div class="todo-actions"><button type="button" data-todo-edit title="编辑待办" aria-label="编辑待办">✎</button><button type="button" data-todo-delete title="删除待办" aria-label="删除待办">×</button></div></li>`).join('');
+}
+function handleTodoListChange(event) {
+  const checkbox = event.target.closest('[data-todo-complete]');
+  if (!checkbox) return;
+  const todo = currentTrip().todos.find(item => item.id === checkbox.closest('[data-todo-id]').dataset.todoId);
+  if (!todo) return;
+  todo.completed = checkbox.checked;
+  persist();
+  renderTodos();
+}
+function handleTodoListClick(event) {
+  const row = event.target.closest('[data-todo-id]');
+  if (!row) return;
+  const trip = currentTrip();
+  const index = trip.todos.findIndex(todo => todo.id === row.dataset.todoId);
+  if (index < 0) return;
+  if (event.target.closest('[data-todo-delete]')) {
+    trip.todos.splice(index, 1);
+    persist();
+    renderTodos();
+    return;
+  }
+  if (!event.target.closest('[data-todo-edit]')) return;
+  const todo = trip.todos[index];
+  const label = row.querySelector('.todo-check');
+  label.innerHTML = `<input class="todo-edit-input" maxlength="80" value="${escapeHtml(todo.text)}" aria-label="编辑待办内容">`;
+  const actions = row.querySelector('.todo-actions');
+  actions.innerHTML = '<button type="button" data-todo-save title="保存" aria-label="保存">✓</button><button type="button" data-todo-cancel title="取消" aria-label="取消">×</button>';
+  const input = row.querySelector('.todo-edit-input');
+  input.focus();
+  input.select();
+}
+function handleTodoListEdit(event) {
+  const row = event.target.closest('[data-todo-id]');
+  if (!row) return;
+  if (event.target.closest('[data-todo-cancel]')) return renderTodos();
+  if (!event.target.closest('[data-todo-save]')) return;
+  const text = row.querySelector('.todo-edit-input').value.trim();
+  if (!text) return showToast('待办内容不能为空');
+  const todo = currentTrip().todos.find(item => item.id === row.dataset.todoId);
+  if (todo) todo.text = text;
+  persist();
+  renderTodos();
 }
 function memberEditorRow(member, index) {
   return `<div class="member-editor-row" data-member-index="${index}">
@@ -409,7 +471,7 @@ function renderTripHeader() {
 function renderApp() {
   const trip = currentTrip();
   selectedDay = Math.min(selectedDay, trip.days.length - 1);
-  renderTripHeader(); renderTimeline(); updateCost();
+  renderTripHeader(); renderTimeline(); renderTodos(); updateCost();
 }
 function openEditor(index = -1) {
   editingIndex = index;
@@ -556,6 +618,31 @@ document.querySelector('#openTripFile').addEventListener('click', () => {
   else document.querySelector('#tripFileInput').click();
 });
 document.querySelector('#tripFileInput').addEventListener('change', openTripFile);
+$('#todoForm').addEventListener('submit', event => {
+  event.preventDefault();
+  const input = $('#newTodoText');
+  const text = input.value.trim();
+  if (!text) return;
+  currentTrip().todos.push(normalizeTodo({ text }, currentTrip().todos.length));
+  persist();
+  renderTodos();
+  input.value = '';
+  input.focus();
+});
+$('#todoList').addEventListener('change', handleTodoListChange);
+$('#todoList').addEventListener('click', event => {
+  if (event.target.closest('[data-todo-save], [data-todo-cancel]')) handleTodoListEdit(event);
+  else handleTodoListClick(event);
+});
+$('#todoList').addEventListener('keydown', event => {
+  if (!event.target.matches('.todo-edit-input')) return;
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    handleTodoListEdit({ target: event.target.closest('[data-todo-id]').querySelector('[data-todo-save]') });
+  } else if (event.key === 'Escape') {
+    renderTodos();
+  }
+});
 document.querySelector('#addMember').addEventListener('click', () => {
   const trip = currentTrip();
   trip.familyMembers = [...(trip.familyMembers || []), normalizeMember({ id: `member-${Date.now()}`, name: `成员 ${trip.familyMembers.length + 1}`, role: '成人' }, trip.familyMembers.length)];

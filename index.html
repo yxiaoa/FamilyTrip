@@ -37,7 +37,10 @@
           <aside class="right-column">
             <div class="map-card"><div class="card-heading"><h3>今日路线</h3><button class="link-button" id="openMap">在地图中打开 ↗</button></div><div class="map-visual"><div class="map-grid"></div><svg viewBox="0 0 320 150" preserveAspectRatio="none"><path class="route-line" d="M25 119 C82 92, 77 42, 142 55 S200 118, 288 27"></path><circle cx="25" cy="119" r="7" class="route-point start"></circle><circle cx="142" cy="55" r="7" class="route-point"></circle><circle cx="288" cy="27" r="7" class="route-point end"></circle></svg><span class="map-label label-a">京都站</span><span class="map-label label-b">锦市场</span><span class="map-label label-c">清水寺</span></div><div class="route-summary"><span>⌁ 3 个地点</span><span>↗ 12.4 km</span><span>◷ 48 分钟</span></div></div>
             <div class="members-card"><div class="card-heading"><h3>同行家庭</h3><button class="link-button" id="manageMembers">管理</button></div><div class="member-list" id="memberList"></div><button class="invite-button" id="addMember">＋ 添加家庭成员</button></div>
-            <div class="notice-card"><span class="notice-icon">↗</span><div><strong>人数变化会自动重算</strong><p>房间、车辆与门票费用将随家庭成员变化自动更新。</p></div></div>
+            <section class="notice-card todo-card" aria-labelledby="todoHeading">
+              <div class="todo-heading"><div><h3 id="todoHeading">旅行待办</h3><small id="todoProgress"></small></div><form id="todoForm" class="todo-add-form"><input id="newTodoText" maxlength="80" placeholder="添加待办事项" aria-label="新的待办事项" required><button type="submit" aria-label="添加待办">＋</button></form></div>
+              <ul id="todoList" class="todo-list"></ul>
+            </section>
           </aside>
           <div class="itinerary-panel">
             <div class="section-heading"><div><h2>行程安排</h2><span class="section-note">每一天可单独添加；调整时间后会保留空档并支持插入安排</span></div></div>
