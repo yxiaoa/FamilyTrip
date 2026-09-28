@@ -620,19 +620,116 @@ form.addEventListener('submit', event => {
   addingActivityAlternative = false; insertingActivityIndex = -1; newActivityTime = '';
   persist(); dialog.close(); renderTimeline(); updateCost(); showToast(wasAlternative ? '活动备用方案已添加' : (editingIndex >= 0 ? '安排已更新，后续时间自动顺延' : '安排已添加'));
 });
+function xmlEscape(value) {
+  return String(value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[character]);
+}
+function zipStore(files) {
+  const encoder = new TextEncoder();
+  const crc32 = bytes => {
+    let crc = 0xffffffff;
+    for (const byte of bytes) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  };
+  const chunks = [];
+  const directory = [];
+  let offset = 0;
+  for (const [name, content] of Object.entries(files)) {
+    const nameBytes = encoder.encode(name);
+    const data = encoder.encode(content);
+    const crc = crc32(data);
+    const local = new Uint8Array(30 + nameBytes.length + data.length);
+    const localView = new DataView(local.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true); localView.setUint16(6, 0x0800, true);
+    localView.setUint32(14, crc, true); localView.setUint32(18, data.length, true); localView.setUint32(22, data.length, true);
+    localView.setUint16(26, nameBytes.length, true); local.set(nameBytes, 30); local.set(data, 30 + nameBytes.length);
+    chunks.push(local);
+
+    const central = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(central.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true); centralView.setUint16(6, 20, true); centralView.setUint16(8, 0x0800, true);
+    centralView.setUint32(16, crc, true); centralView.setUint32(20, data.length, true); centralView.setUint32(24, data.length, true);
+    centralView.setUint16(28, nameBytes.length, true); centralView.setUint32(42, offset, true); central.set(nameBytes, 46);
+    directory.push(central);
+    offset += local.length;
+  }
+  const directoryOffset = offset;
+  const directorySize = directory.reduce((size, entry) => size + entry.length, 0);
+  chunks.push(...directory);
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(8, directory.length, true); endView.setUint16(10, directory.length, true);
+  endView.setUint32(12, directorySize, true); endView.setUint32(16, directoryOffset, true);
+  chunks.push(end);
+  return new Blob(chunks, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+function createItineraryWorkbook(rows, dayRanges) {
+  const columns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  const cellXml = (value, column, rowNumber) => {
+    const reference = `${column}${rowNumber}`;
+    if (typeof value === 'number' && Number.isFinite(value)) return `<c r="${reference}" s="${column === 'F' || column === 'G' || column === 'H' ? 3 : 2}"><v>${value}</v></c>`;
+    return `<c r="${reference}" s="${rowNumber === 1 ? 1 : 2}" t="inlineStr"><is><t xml:space="preserve">${xmlEscape(value)}</t></is></c>`;
+  };
+  const header = ['日期', '星期', '时间', '目的地/活动', '项目', '单价', '人数', '费用'];
+  const sheetRows = [header, ...rows].map((values, index) => {
+    const rowNumber = index + 1;
+    return `<row r="${rowNumber}">${values.map((value, columnIndex) => cellXml(value, columns[columnIndex], rowNumber)).join('')}</row>`;
+  }).join('');
+  const merges = dayRanges.filter(range => range.end > range.start)
+    .flatMap(range => [`<mergeCell ref="A${range.start}:A${range.end}"/>`, `<mergeCell ref="B${range.start}:B${range.end}"/>`]);
+  const files = {
+    '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>',
+    '_rels/.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+    'xl/workbook.xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="行程表" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
+    'xl/styles.xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.##"/></numFmts><fonts count="2"><font><sz val="11"/><name val="等线"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="等线"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF000000"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="dotted"><color rgb="FF777777"/></left><right style="dotted"><color rgb="FF777777"/></right><top style="dotted"><color rgb="FF777777"/></top><bottom style="dotted"><color rgb="FF777777"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="1" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>',
+    'xl/worksheets/sheet1.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="21"/><cols><col min="1" max="1" width="13" customWidth="1"/><col min="2" max="2" width="8" customWidth="1"/><col min="3" max="3" width="18" customWidth="1"/><col min="4" max="4" width="42" customWidth="1"/><col min="5" max="5" width="12" customWidth="1"/><col min="6" max="8" width="12" customWidth="1"/></cols><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:H${rows.length + 1}"/>${merges.length ? `<mergeCells count="${merges.length}">${merges.join('')}</mergeCells>` : ''}</worksheet>`
+  };
+  return zipStore(files);
+}
 function exportExcel() {
   const trip = currentTrip();
-  const rows = trip.days.flatMap((day, dayIndex) => {
-    let current = timeToMinutes(day.startTime);
-    return day.activities.map((a, i) => {
-      const time = formatTime(current);
-      current += Number(a.duration);
-      return `<tr><td>第${dayIndex + 1}天</td><td>${i + 1}</td><td>${time}</td><td>${escapeHtml(a.category)}</td><td>${a.costMode === 'perPerson' ? '按权重' : '总额'}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.detail)}</td><td>${a.duration}</td><td>${activityTotalForTrip(a, trip)}</td><td>${a.currency}</td><td>${activityTotalCny(a, trip).toFixed(2)}</td></tr>`;
+  const rows = [];
+  const dayRanges = [];
+  const startDate = new Date(`${trip.startDate}T00:00:00Z`);
+  const projectNames = { '交通费': '车票', '机票': '机票', '住宿费': '住宿', '餐饮费': '餐饮', '门票': '门票' };
+  trip.days.forEach((day, dayIndex) => {
+    if (!day.activities.length) return;
+    const date = new Date(startDate);
+    date.setUTCDate(date.getUTCDate() + dayIndex);
+    const dateLabel = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+    const weekday = date.getUTCDay() || 7;
+    const firstRow = rows.length + 2;
+    day.activities.forEach((activity, index) => {
+      const start = formatTime(activityStartTime(day, index));
+      const end = endTimeFor(start, activity.duration);
+      const expenseType = expenseCategory(activity.category);
+      const people = activity.costMode === 'perPerson'
+        ? (expenseType ? trip.familyMembers.reduce((sum, member) => sum + member.weights[expenseType], 0) : trip.members)
+        : 1;
+      rows.push([
+        dateLabel, weekday, `${start}-${end}`,
+        [activity.title, activity.detail].filter(Boolean).join(' · '),
+        projectNames[activity.category] || activity.category,
+        Number(activity.cost || 0), people, activityTotalForTrip(activity, trip)
+      ]);
     });
-  }).join('');
-  const table = `<table border="1"><tr><th>日期</th><th>序号</th><th>时间</th><th>类别</th><th>计费方式</th><th>安排</th><th>说明</th><th>时长（分钟）</th><th>费用金额</th><th>币种</th><th>折算总费用（CNY）</th></tr>${rows}</table>`;
-  const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`\ufeff<html><meta charset="utf-8">${table}</html>`], { type: 'application/vnd.ms-excel' }));
-  link.download = `${trip.name}-行程.xls`; link.click(); URL.revokeObjectURL(link.href); showToast('Excel 行程表已下载');
+    dayRanges.push({ start: firstRow, end: rows.length + 1 });
+  });
+  const blob = createItineraryWorkbook(rows, dayRanges);
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = `${safeFilePart(trip.name) || '行程'}-行程.xlsx`;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast('Excel 行程表已下载');
 }
 function expenseTotal(trip) {
   return trip.days.reduce((total, day) => total + day.activities.reduce((sum, activity) => sum + activityTotalCny(activity, trip), 0), 0);
