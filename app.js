@@ -13,8 +13,8 @@ const seedDays = [
   ...['岚山竹林 · 渡月桥', '伏见稻荷 · 宇治抹茶', '奈良一日 · 与鹿相遇', '返程 · 带着春色回家'].map(title => ({ title, startTime: '09:00', activities: [] }))
 ];
 const stateKey = 'familyTripPlanner';
-const CURRENT_SCHEMA_VERSION = 7;
-const builtInCategories = ['交通费', '机票', '住宿费', '餐饮费', '门票', '其他'];
+const CURRENT_SCHEMA_VERSION = 8;
+const builtInCategories = ['交通费', '机票', '住宿费', '旅行物品', '餐饮费', '门票', '其他'];
 const supportedCurrencies = ['CNY', 'JPY', 'USD', 'HKD', 'EUR'];
 const defaultExchangeRates = { CNY: 1, JPY: 0.05, USD: 7.2, HKD: 0.92, EUR: 7.8 };
 const tripHandleDatabaseName = 'familyTripFileHandles';
@@ -167,7 +167,7 @@ function normalizeTrip(trip) {
   const displayCurrency = supportedCurrencies.includes(trip.displayCurrency) ? trip.displayCurrency : 'CNY';
   const todos = Array.isArray(trip.todos) ? trip.todos.map((todo, index) => normalizeTodo(todo, index)) : defaultTodos();
   const customCategories = [...new Set((Array.isArray(trip.customCategories) ? trip.customCategories : []).map(category => String(category).trim()).filter(category => category && !builtInCategories.includes(category)))].slice(0, 30);
-  return { ...trip, members: familyMembers.length, familyMembers, exchangeRates, displayCurrency, todos, customCategories, days: days.map((day, index) => ({ ...day, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities.map(normalizeActivity) : [], alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(normalizeDayAlternative) : [] })) };
+  return { ...trip, members: familyMembers.length, familyMembers, exchangeRates, displayCurrency, todos, customCategories, days: days.map((day, index) => ({ ...day, isDayZero: index === 0 && day.isDayZero === true, title: index === 0 && day.isDayZero ? '行前准备' : day.title, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities.map(normalizeActivity) : [], alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(normalizeDayAlternative) : [] })) };
 }
 function defaultTodos() {
   return [
@@ -189,10 +189,13 @@ function normalizeMember(member, index) {
 }
 function normalizeActivity(activity) {
   const alternatives = Array.isArray(activity.alternatives) ? activity.alternatives.map(item => normalizeActivity({ ...item, alternatives: [] })) : [];
-  const type = ['accommodation', 'transport'].includes(activity.type) ? activity.type : 'activity';
-  const normalized = { ...activity, type, fromLocation: String(activity.fromLocation || ''), toLocation: String(activity.toLocation || ''), duration: type === 'accommodation' ? 0 : Number(activity.duration) || 60, category: activity.category || '其他', costMode: activity.costMode === 'perPerson' ? 'perPerson' : 'total', cost: Math.max(0, Number(activity.cost) || 0), currency: supportedCurrencies.includes(activity.currency) ? activity.currency : 'CNY', timeLocked: type !== 'accommodation' && activity.timeLocked === true, completed: activity.completed === true, alternatives };
-  if (type === 'accommodation') delete normalized.time;
+  const type = ['accommodation', 'transport', 'purchase'].includes(activity.type) ? activity.type : 'activity';
+  const normalized = { ...activity, type, fromLocation: String(activity.fromLocation || ''), toLocation: String(activity.toLocation || ''), duration: isUntimedActivity({ type }) ? 0 : Number(activity.duration) || 60, category: activity.category || '其他', costMode: activity.costMode === 'perPerson' ? 'perPerson' : 'total', cost: Math.max(0, Number(activity.cost) || 0), currency: supportedCurrencies.includes(activity.currency) ? activity.currency : 'CNY', timeLocked: !isUntimedActivity({ type }) && activity.timeLocked === true, completed: activity.completed === true, alternatives };
+  if (isUntimedActivity(normalized)) delete normalized.time;
   return normalized;
+}
+function isUntimedActivity(activity) {
+  return activity.type === 'accommodation' || activity.type === 'purchase';
 }
 function normalizeDayAlternative(alternative) {
   return { id: alternative.id || `day-option-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: alternative.name || '备用方案', activities: Array.isArray(alternative.activities) ? alternative.activities.map(normalizeActivity) : [] };
@@ -397,12 +400,37 @@ function activityStartTime(day, index) {
   for (let itemIndex = 0; itemIndex < index; itemIndex += 1) {
     const item = day.activities[itemIndex];
     if (item.type === 'accommodation') continue;
-    if (item.timeLocked && item.time) current = Math.max(current, timeToMinutes(item.time));
+    if (item.timeLocked && item.time) current = timeToMinutes(item.time);
     current += Number(item.duration);
   }
   const activity = day.activities[index];
   if (activity?.type === 'accommodation') return current;
-  return activity?.timeLocked && activity.time ? Math.max(current, timeToMinutes(activity.time)) : current;
+  return activity?.timeLocked && activity.time ? timeToMinutes(activity.time) : current;
+}
+function activityTimeConflicts(day) {
+  const conflicts = new Map();
+  const scheduled = day.activities
+    .map((activity, index) => ({
+      activity,
+      index,
+      start: activityStartTime(day, index),
+      end: activityStartTime(day, index) + Math.max(0, Number(activity.duration) || 0)
+    }))
+    .filter(item => item.activity.type !== 'accommodation' && item.end > item.start);
+  scheduled.forEach((item, index) => {
+    scheduled.slice(index + 1).forEach(other => {
+      const overlap = Math.min(item.end, other.end) - Math.max(item.start, other.start);
+      if (overlap <= 0) return;
+      const addConflict = (current, partner) => {
+        const items = conflicts.get(current.index) || [];
+        items.push({ title: partner.activity.title, minutes: overlap });
+        conflicts.set(current.index, items);
+      };
+      addConflict(item, other);
+      addConflict(other, item);
+    });
+  });
+  return conflicts;
 }
 function gapHtml(dayIndex, insertIndex, start, end) {
   const duration = end - start;
@@ -442,9 +470,11 @@ function renderTimeline() {
   const range = dateRange(trip.startDate, trip.endDate);
   daysBoard.innerHTML = trip.days.map((day, dayIndex) => {
     const activities = day.activities;
+    const timeConflicts = activityTimeConflicts(day);
     let previousEnd = timeToMinutes(day.startTime);
     const activityHtml = activities.length ? activities.map((activity, index) => {
       const start = activityStartTime(day, index);
+      const conflicts = timeConflicts.get(index) || [];
       const isAccommodation = activity.type === 'accommodation';
       const isTransport = activity.type === 'transport';
       const gap = isAccommodation ? '' : gapHtml(dayIndex, index, previousEnd, start);
@@ -453,10 +483,12 @@ function renderTimeline() {
       const typeLabel = isAccommodation ? '住宿' : isTransport ? '交通' : '';
       const routeHtml = isTransport ? `<div class="activity-route"><span>${escapeHtml(activity.fromLocation || '出发地点')}</span><b aria-label="前往">→</b><span>${escapeHtml(activity.toLocation || '到达地点')}</span></div>` : '';
       const timeHtml = isAccommodation ? '<span>住宿</span>' : `<span>${formatTime(start)}</span><small>${activity.duration}分钟</small>`;
-      return `${gap}<div class="activity${isAccommodation ? ' activity-accommodation' : ''}${isTransport ? ' activity-transport' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
-        <div class="activity-card${activity.completed ? ' is-complete' : ''}${isAccommodation ? ' is-accommodation' : ''}${isTransport ? ' is-transport' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="拖动安排：${escapeHtml(activity.title)}"><div class="activity-main"><div>${typeLabel ? `<span class="activity-type-label">${typeLabel}</span>` : ''}<h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
+      const conflictHtml = conflicts.length ? `<div class="time-overlap-warning" role="status">⚠ 时间重叠：${conflicts.map(conflict => `与「${escapeHtml(conflict.title)}」重叠 ${conflict.minutes} 分钟`).join('；')}</div>` : '';
+      return `${gap}<div class="activity${isAccommodation ? ' activity-accommodation' : ''}${isTransport ? ' activity-transport' : ''}${conflicts.length ? ' has-time-overlap' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
+        <div class="activity-card${activity.completed ? ' is-complete' : ''}${isAccommodation ? ' is-accommodation' : ''}${isTransport ? ' is-transport' : ''}${conflicts.length ? ' has-time-overlap' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="拖动安排：${escapeHtml(activity.title)}"><div class="activity-main"><div>${typeLabel ? `<span class="activity-type-label">${typeLabel}</span>` : ''}<h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
           <div class="activity-meta"><strong>${escapeHtml(activity.category)} ${formatCurrency(activityTotalForTrip(activity, trip), activity.currency)}</strong></div>
         <details class="activity-menu"><summary aria-label="更多操作" title="更多操作">⋮</summary><div class="activity-menu-items"><button data-action="toggle-complete" aria-pressed="${activity.completed}">${activity.completed ? '取消完成' : '标记完成'}</button><button data-action="up">上移</button><button data-action="down">下移</button><button data-action="edit">编辑</button><button data-action="add-alternative">添加备用安排</button><button data-action="delete">删除</button></div></details>
+        ${conflictHtml}
         ${alternativeButtons ? `<div class="activity-alternatives"><span>备用方案：</span>${alternativeButtons}</div>` : ''}</div></div>`;
     }).join('') : '<div class="empty-state">暂无安排</div>';
     const date = new Date(range.start);
@@ -665,7 +697,11 @@ function openCurrencyDialog() {
 }
 ['activityStartTime', 'activityDuration'].forEach(id => document.querySelector(`#${id}`).addEventListener('change', syncActivityEndTime));
 document.querySelector('#activityEndTime').addEventListener('change', syncActivityDuration);
-$('#activityType').addEventListener('change', syncActivityTypeFields);
+$('#activityType').addEventListener('change', event => {
+  const defaultCategory = { accommodation: '住宿费', transport: '交通费' }[event.target.value];
+  if (defaultCategory) renderCategoryOptions(defaultCategory);
+  syncActivityTypeFields();
+});
 $('#costModeSwitch').addEventListener('click', event => {
   const button = event.target.closest('[data-cost-mode]');
   if (button) setActivityCostMode(button.dataset.costMode);
