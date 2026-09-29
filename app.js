@@ -13,7 +13,7 @@ const seedDays = [
   ...['岚山竹林 · 渡月桥', '伏见稻荷 · 宇治抹茶', '奈良一日 · 与鹿相遇', '返程 · 带着春色回家'].map(title => ({ title, startTime: '09:00', activities: [] }))
 ];
 const stateKey = 'familyTripPlanner';
-const CURRENT_SCHEMA_VERSION = 8;
+const CURRENT_SCHEMA_VERSION = 9;
 const builtInCategories = ['交通费', '机票', '住宿费', '旅行物品', '餐饮费', '门票', '其他'];
 const supportedCurrencies = ['CNY', 'JPY', 'USD', 'HKD', 'EUR'];
 const defaultExchangeRates = { CNY: 1, JPY: 0.05, USD: 7.2, HKD: 0.92, EUR: 7.8 };
@@ -190,8 +190,28 @@ function normalizeMember(member, index) {
 function normalizeActivity(activity) {
   const alternatives = Array.isArray(activity.alternatives) ? activity.alternatives.map(item => normalizeActivity({ ...item, alternatives: [] })) : [];
   const type = ['accommodation', 'transport', 'purchase'].includes(activity.type) ? activity.type : 'activity';
-  const normalized = { ...activity, type, fromLocation: String(activity.fromLocation || ''), toLocation: String(activity.toLocation || ''), duration: isUntimedActivity({ type }) ? 0 : Number(activity.duration) || 60, category: activity.category || '其他', costMode: activity.costMode === 'perPerson' ? 'perPerson' : 'total', cost: Math.max(0, Number(activity.cost) || 0), currency: supportedCurrencies.includes(activity.currency) ? activity.currency : 'CNY', timeLocked: !isUntimedActivity({ type }) && activity.timeLocked === true, completed: activity.completed === true, alternatives };
-  if (isUntimedActivity(normalized)) delete normalized.time;
+  const hasTime = typeof activity.hasTime === 'boolean' ? activity.hasTime : !isUntimedActivity({ type });
+  const hasCost = typeof activity.hasCost === 'boolean' ? activity.hasCost : true;
+  const normalized = { ...activity, type, fromLocation: String(activity.fromLocation || ''), toLocation: String(activity.toLocation || ''), hasTime, hasCost, completed: activity.completed === true, alternatives };
+  if (hasTime) {
+    normalized.duration = Number(activity.duration) || 60;
+    normalized.timeLocked = activity.timeLocked === true;
+  } else {
+    delete normalized.time;
+    delete normalized.duration;
+    delete normalized.timeLocked;
+  }
+  if (hasCost) {
+    normalized.category = activity.category || '其他';
+    normalized.costMode = activity.costMode === 'perPerson' ? 'perPerson' : 'total';
+    normalized.cost = Math.max(0, Number(activity.cost) || 0);
+    normalized.currency = supportedCurrencies.includes(activity.currency) ? activity.currency : 'CNY';
+  } else {
+    delete normalized.category;
+    delete normalized.costMode;
+    delete normalized.cost;
+    delete normalized.currency;
+  }
   return normalized;
 }
 function isUntimedActivity(activity) {
@@ -210,6 +230,7 @@ function expenseCategory(category) {
   return null;
 }
 function activityTotalForTrip(activity, trip) {
+  if (!activity.hasCost) return 0;
   if (activity.costMode !== 'perPerson') return Number(activity.cost || 0);
   const key = expenseCategory(activity.category);
   const units = key ? trip.familyMembers.reduce((sum, member) => sum + member.weights[key], 0) : trip.members;
@@ -427,12 +448,12 @@ function activityStartTime(day, index) {
   let current = timeToMinutes(day.startTime);
   for (let itemIndex = 0; itemIndex < index; itemIndex += 1) {
     const item = day.activities[itemIndex];
-    if (isUntimedActivity(item)) continue;
+    if (!item.hasTime) continue;
     if (item.timeLocked && item.time) current = timeToMinutes(item.time);
     current += Number(item.duration);
   }
   const activity = day.activities[index];
-  if (activity && isUntimedActivity(activity)) return current;
+  if (!activity?.hasTime) return current;
   return activity?.timeLocked && activity.time ? timeToMinutes(activity.time) : current;
 }
 function activityTimeConflicts(day) {
@@ -444,7 +465,7 @@ function activityTimeConflicts(day) {
       start: activityStartTime(day, index),
       end: activityStartTime(day, index) + Math.max(0, Number(activity.duration) || 0)
     }))
-    .filter(item => !isUntimedActivity(item.activity) && item.end > item.start);
+    .filter(item => item.activity.hasTime && item.end > item.start);
   scheduled.forEach((item, index) => {
     scheduled.slice(index + 1).forEach(other => {
       const overlap = Math.min(item.end, other.end) - Math.max(item.start, other.start);
@@ -482,6 +503,7 @@ function updateTripProgress() {
     const dayStart = timeToMinutes(day.startTime);
     availableMinutes += Math.max(0, planningEnd - dayStart);
     day.activities.forEach((activity, index) => {
+      if (!activity.hasTime) return;
       const activityStart = activityStartTime(day, index);
       const activityEnd = activityStart + Math.max(0, Number(activity.duration) || 0);
       plannedMinutes += Math.max(0, Math.min(activityEnd, planningEnd) - Math.max(activityStart, dayStart));
@@ -505,20 +527,17 @@ function renderTimeline() {
     const activityHtml = activities.length ? activities.map((activity, index) => {
       const start = activityStartTime(day, index);
       const conflicts = timeConflicts.get(index) || [];
-      const isAccommodation = activity.type === 'accommodation';
       const isTransport = activity.type === 'transport';
       const isPurchase = activity.type === 'purchase';
-      const isUntimed = isUntimedActivity(activity);
-      const gap = isUntimed ? '' : gapHtml(dayIndex, index, previousEnd, start);
-      if (!isUntimed) previousEnd = start + Number(activity.duration);
+      const gap = activity.hasTime ? gapHtml(dayIndex, index, previousEnd, start) : '';
+      if (activity.hasTime) previousEnd = start + Number(activity.duration);
       const alternativeButtons = activity.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-action="select-activity-alternative" data-alternative-index="${alternativeIndex}">备选：${escapeHtml(alternative.title)}</button>`).join('');
-      const typeLabel = isAccommodation ? '住宿' : isTransport ? '交通' : isPurchase ? '购买' : '';
       const routeHtml = isTransport ? `<div class="activity-route"><span>${escapeHtml(activity.fromLocation || '出发地点')}</span><b aria-label="前往">→</b><span>${escapeHtml(activity.toLocation || '到达地点')}</span></div>` : '';
-      const timeHtml = isUntimed ? `<span>${isAccommodation ? '住宿' : '购买'}</span>` : `<span>${formatTime(start)}</span><small>${activity.duration}分钟</small>`;
+      const timeHtml = activity.hasTime ? `<span>${formatTime(start)}</span><small>${activity.duration}分钟</small>` : '<span>未记录时间</span>';
       const conflictHtml = conflicts.length ? `<div class="time-overlap-warning" role="status">⚠ 时间重叠：${conflicts.map(conflict => `与「${escapeHtml(conflict.title)}」重叠 ${conflict.minutes} 分钟`).join('；')}</div>` : '';
-      return `${gap}<div class="activity${isAccommodation ? ' activity-accommodation' : ''}${isTransport ? ' activity-transport' : ''}${isPurchase ? ' activity-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
-        <div class="activity-card${activity.completed ? ' is-complete' : ''}${isAccommodation ? ' is-accommodation' : ''}${isTransport ? ' is-transport' : ''}${isPurchase ? ' is-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="拖动安排：${escapeHtml(activity.title)}"><div class="activity-main"><div>${typeLabel ? `<span class="activity-type-label">${typeLabel}</span>` : ''}<h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
-          <div class="activity-meta"><strong>${escapeHtml(activity.category)} ${formatCurrency(activityTotalForTrip(activity, trip), activity.currency)}</strong></div>
+      return `${gap}<div class="activity${!activity.hasTime ? ' activity-untimed' : ''}${isTransport ? ' activity-transport' : ''}${isPurchase ? ' activity-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
+        <div class="activity-card${activity.completed ? ' is-complete' : ''}${!activity.hasTime ? ' is-untimed' : ''}${isTransport ? ' is-transport' : ''}${isPurchase ? ' is-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="拖动安排：${escapeHtml(activity.title)}"><div class="activity-main"><div><h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
+          ${activity.hasCost ? `<div class="activity-meta"><strong>${escapeHtml(activity.category)} ${formatCurrency(activityTotalForTrip(activity, trip), activity.currency)}</strong></div>` : ''}
         <details class="activity-menu"><summary aria-label="更多操作" title="更多操作">⋮</summary><div class="activity-menu-items"><button data-action="toggle-complete" aria-pressed="${activity.completed}">${activity.completed ? '取消完成' : '标记完成'}</button><button data-action="up">上移</button><button data-action="down">下移</button><button data-action="edit">编辑</button><button data-action="add-alternative">添加备用安排</button><button data-action="delete">删除</button></div></details>
         ${conflictHtml}
         ${alternativeButtons ? `<div class="activity-alternatives"><span>备用方案：</span>${alternativeButtons}</div>` : ''}</div></div>`;
@@ -692,22 +711,30 @@ function setActivityCostMode(mode) {
     button.setAttribute('aria-pressed', String(selected));
   });
 }
+function setActivityTimeEnabled(enabled) {
+  $('#toggleActivityTime').classList.toggle('is-active', enabled);
+  $('#toggleActivityTime').setAttribute('aria-pressed', String(enabled));
+  $('#activityTimeFields').hidden = !enabled;
+  $('#activityStartTime').required = enabled;
+  $('#activityEndTime').required = enabled;
+  if (enabled && Number($('#activityDuration').value) < 10) $('#activityDuration').value = 60;
+  if (enabled) syncActivityEndTime();
+}
+function setActivityCostEnabled(enabled) {
+  $('#toggleActivityCost').classList.toggle('is-active', enabled);
+  $('#toggleActivityCost').setAttribute('aria-pressed', String(enabled));
+  $('#activityCostFields').hidden = !enabled;
+}
 function syncActivityTypeFields() {
   const type = $('#activityType').value;
-  const isUntimed = isUntimedActivity({ type });
   const isTransport = type === 'transport';
-  $('#activityTimeFields').hidden = isUntimed;
   $('#transportLocationFields').hidden = !isTransport;
-  $('#activityStartTime').required = !isUntimed;
-  $('#activityEndTime').required = !isUntimed;
   $('#transportFrom').required = isTransport;
   $('#transportTo').required = isTransport;
-  if (!isUntimed && Number($('#activityDuration').value) < 10) $('#activityDuration').value = 60;
-  if (!isUntimed) syncActivityEndTime();
 }
 function openEditor(index = -1) {
   editingIndex = index;
-  const activity = index >= 0 ? currentTrip().days[selectedDay].activities[index] : { type: 'activity', title: '', detail: '', category: '其他', cost: 0, costMode: 'total', duration: 60 };
+  const activity = index >= 0 ? currentTrip().days[selectedDay].activities[index] : { type: 'activity', title: '', detail: '', category: '其他', cost: 0, costMode: 'total', duration: 60, hasTime: true, hasCost: true };
   $('#dialogMode').textContent = addingActivityAlternative ? '新增活动备用方案' : (index >= 0 ? '编辑安排' : '新增安排');
   $('#dialogTitle').textContent = index >= 0 ? activity.title : '添加行程';
   $('#activityName').value = activity.title; $('#activityDetail').value = activity.detail;
@@ -718,7 +745,8 @@ function openEditor(index = -1) {
   const day = currentTrip().days[selectedDay];
   $('#activityStartTime').value = index >= 0 && activity.timeLocked ? activity.time : newActivityTime || formatTime(activityStartTime(day, index >= 0 ? index : day.activities.length));
   syncActivityTypeFields();
-  syncActivityEndTime();
+  setActivityTimeEnabled(activity.hasTime);
+  setActivityCostEnabled(activity.hasCost);
   dialog.showModal(); $('#activityName').focus();
 }
 function openCurrencyDialog() {
@@ -736,6 +764,8 @@ $('#activityType').addEventListener('change', event => {
   if (defaultCategory) renderCategoryOptions(defaultCategory);
   syncActivityTypeFields();
 });
+$('#toggleActivityTime').addEventListener('click', () => setActivityTimeEnabled(!$('#toggleActivityTime').classList.contains('is-active')));
+$('#toggleActivityCost').addEventListener('click', () => setActivityCostEnabled(!$('#toggleActivityCost').classList.contains('is-active')));
 $('#costModeSwitch').addEventListener('click', event => {
   const button = event.target.closest('[data-cost-mode]');
   if (button) setActivityCostMode(button.dataset.costMode);
@@ -743,27 +773,30 @@ $('#costModeSwitch').addEventListener('click', event => {
 form.addEventListener('submit', event => {
   event.preventDefault();
   const type = $('#activityType').value;
-  const isUntimed = isUntimedActivity({ type });
-  const duration = isUntimed ? 0 : Number($('#activityDuration').value);
-  if (!isUntimed && (!Number.isInteger(duration) || duration < 10 || duration > 720)) return showToast('时长需为 10 - 720 分钟的整数');
-  const startTime = isUntimed ? '' : $('#activityStartTime').value;
+  const hasTime = $('#toggleActivityTime').classList.contains('is-active');
+  const hasCost = $('#toggleActivityCost').classList.contains('is-active');
+  const duration = hasTime ? Number($('#activityDuration').value) : 0;
+  if (hasTime && (!Number.isInteger(duration) || duration < 10 || duration > 720)) return showToast('时长需为 10 - 720 分钟的整数');
+  const startTime = hasTime ? $('#activityStartTime').value : '';
   const endTime = $('#activityEndTime').value;
-  if (!isUntimed && (!startTime || !endTime || timeToMinutes(endTime) <= timeToMinutes(startTime))) return showToast('结束时间需晚于开始时间，暂不支持跨天安排');
-  if (!isUntimed && timeToMinutes(endTime) - timeToMinutes(startTime) !== duration) return showToast('请修改结束时间或时长，使两者保持一致');
+  if (hasTime && (!startTime || !endTime || timeToMinutes(endTime) <= timeToMinutes(startTime))) return showToast('结束时间需晚于开始时间，暂不支持跨天安排');
+  if (hasTime && timeToMinutes(endTime) - timeToMinutes(startTime) !== duration) return showToast('请修改结束时间或时长，使两者保持一致');
   const fromLocation = $('#transportFrom').value.trim();
   const toLocation = $('#transportTo').value.trim();
   if (type === 'transport' && (!fromLocation || !toLocation)) return showToast('请填写交通行程的出发地点和到达地点');
-  const activity = normalizeActivity({ type, fromLocation, toLocation, title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), category: $('#activityCategory').value, cost: Number($('#activityCost').value) || 0, currency: $('#activityCurrency').value, costMode: $('#activityCostMode').value, duration, time: startTime, timeLocked: Boolean(startTime) });
+  const activity = normalizeActivity({
+    type, fromLocation, toLocation, title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), hasTime, hasCost,
+    ...(hasTime ? { duration, time: startTime, timeLocked: Boolean(startTime) } : {}),
+    ...(hasCost ? { category: $('#activityCategory').value, cost: Number($('#activityCost').value) || 0, currency: $('#activityCurrency').value, costMode: $('#activityCostMode').value } : {})
+  });
   if (!activity.title) return showToast('请填写安排名称');
   const day = currentTrip().days[selectedDay];
-  const suggestedTime = isUntimed ? '' : formatTime(editingIndex >= 0 ? activityStartTime(day, editingIndex) : (newActivityTime ? timeToMinutes(newActivityTime) : activityStartTime(day, day.activities.length)));
-  activity.timeLocked = !isUntimed && (addingActivityAlternative || startTime !== suggestedTime || Boolean(newActivityTime));
+  const suggestedTime = hasTime ? formatTime(editingIndex >= 0 ? activityStartTime(day, editingIndex) : (newActivityTime ? timeToMinutes(newActivityTime) : activityStartTime(day, day.activities.length))) : '';
+  if (hasTime) activity.timeLocked = addingActivityAlternative || startTime !== suggestedTime || Boolean(newActivityTime);
   if (addingActivityAlternative) {
     currentTrip().days[selectedDay].activities[editingIndex].alternatives.push(activity);
   } else if (editingIndex >= 0) {
-    const updatedActivity = { ...currentTrip().days[selectedDay].activities[editingIndex], ...activity };
-    if (isUntimed) delete updatedActivity.time;
-    currentTrip().days[selectedDay].activities[editingIndex] = updatedActivity;
+    currentTrip().days[selectedDay].activities[editingIndex] = normalizeActivity({ ...currentTrip().days[selectedDay].activities[editingIndex], ...activity });
   }
   else {
     if (!activity.timeLocked) delete activity.time;
@@ -861,18 +894,17 @@ function exportExcel() {
     const weekday = date.getUTCDay() || 7;
     const firstRow = rows.length + 2;
     day.activities.forEach((activity, index) => {
-      const isUntimed = isUntimedActivity(activity);
-      const start = isUntimed ? '' : formatTime(activityStartTime(day, index));
-      const end = isUntimed ? '' : endTimeFor(start, activity.duration);
+      const start = activity.hasTime ? formatTime(activityStartTime(day, index)) : '';
+      const end = activity.hasTime ? endTimeFor(start, activity.duration) : '';
       const expenseType = expenseCategory(activity.category);
-      const people = activity.costMode === 'perPerson'
+      const people = activity.hasCost && activity.costMode === 'perPerson'
         ? (expenseType ? trip.familyMembers.reduce((sum, member) => sum + member.weights[expenseType], 0) : trip.members)
-        : 1;
+        : (activity.hasCost ? 1 : '');
       rows.push([
-        dateLabel, weekday, isUntimed ? `${activity.type === 'purchase' ? '购买' : '住宿'}（不限时）` : `${start}-${end}`,
+        dateLabel, weekday, activity.hasTime ? `${start}-${end}` : '未记录时间',
         [activity.title, activity.type === 'transport' ? `${activity.fromLocation} → ${activity.toLocation}` : '', activity.detail].filter(Boolean).join(' · '),
-        projectNames[activity.category] || activity.category,
-        Number(activity.cost || 0), people, activityTotalForTrip(activity, trip)
+        activity.hasCost ? (projectNames[activity.category] || activity.category) : '',
+        activity.hasCost ? Number(activity.cost || 0) : '', people, activity.hasCost ? activityTotalForTrip(activity, trip) : ''
       ]);
     });
     dayRanges.push({ start: firstRow, end: rows.length + 1 });
