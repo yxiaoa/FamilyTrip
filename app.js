@@ -332,17 +332,45 @@ function dateRange(startDate, endDate) {
   const end = new Date(`${endDate}T00:00:00`);
   return { start, days: Math.floor((end - start) / 86400000) + 1 };
 }
+function dayDateOffset(day, dayIndex, hasDayZero) {
+  return day.isDayZero ? -1 : dayIndex - (hasDayZero ? 1 : 0);
+}
 function updateEditTripDaysHint() {
   const startDate = $('#editTripStart').value;
   const endDate = $('#editTripEnd').value;
   if (!startDate || !endDate) return;
   const range = dateRange(startDate, endDate);
   const trip = currentTrip();
-  const removedDays = trip.days.slice(range.days);
+  const tripDays = trip.days[0]?.isDayZero ? trip.days.slice(1) : trip.days;
+  const removedDays = tripDays.slice(range.days);
   const hasContent = removedDays.some(day => day.activities.length || day.alternatives.length);
   $('#editTripDaysHint').textContent = range.days < 1 ? '结束日期不能早于开始日期' : `将显示 ${range.days} 天${hasContent ? '；缩短日期会移除超出范围的安排' : ''}`;
-  $('#editTripRemoveWarning').hidden = !(range.days < trip.days.length && hasContent);
+  $('#editTripRemoveWarning').hidden = !(range.days < tripDays.length && hasContent);
   if (!hasContent) $('#editTripConfirmRemove').checked = false;
+}
+function toggleDayZero() {
+  const trip = currentTrip();
+  const hasDayZero = trip.days[0]?.isDayZero === true;
+  if (hasDayZero) {
+    const preparationDay = trip.days[0];
+    const hasContent = preparationDay.activities.length > 0 || preparationDay.alternatives.length > 0;
+    if (hasContent && !window.confirm('移除 Day0 会删除其中的准备安排，是否继续？')) return;
+    trip.days.shift();
+    selectedDay = Math.max(0, selectedDay - 1);
+    showToast('Day0 准备日已移除');
+  } else {
+    trip.days.unshift({ isDayZero: true, title: '行前准备', startTime: '09:00', activities: [], alternatives: [] });
+    selectedDay += 1;
+    showToast('已添加 Day0，可在出发前安排采购和准备事项');
+  }
+  persist();
+  renderApp();
+}
+function updateDayZeroButton() {
+  const button = $('#toggleDayZero');
+  const hasDayZero = currentTrip().days[0]?.isDayZero === true;
+  button.textContent = hasDayZero ? '− 移除 Day0 准备日' : '＋ 添加 Day0 准备日';
+  button.setAttribute('aria-pressed', String(hasDayZero));
 }
 function openEditTripDialog() {
   const trip = currentTrip();
@@ -399,12 +427,12 @@ function activityStartTime(day, index) {
   let current = timeToMinutes(day.startTime);
   for (let itemIndex = 0; itemIndex < index; itemIndex += 1) {
     const item = day.activities[itemIndex];
-    if (item.type === 'accommodation') continue;
+    if (isUntimedActivity(item)) continue;
     if (item.timeLocked && item.time) current = timeToMinutes(item.time);
     current += Number(item.duration);
   }
   const activity = day.activities[index];
-  if (activity?.type === 'accommodation') return current;
+  if (activity && isUntimedActivity(activity)) return current;
   return activity?.timeLocked && activity.time ? timeToMinutes(activity.time) : current;
 }
 function activityTimeConflicts(day) {
@@ -416,7 +444,7 @@ function activityTimeConflicts(day) {
       start: activityStartTime(day, index),
       end: activityStartTime(day, index) + Math.max(0, Number(activity.duration) || 0)
     }))
-    .filter(item => item.activity.type !== 'accommodation' && item.end > item.start);
+    .filter(item => !isUntimedActivity(item.activity) && item.end > item.start);
   scheduled.forEach((item, index) => {
     scheduled.slice(index + 1).forEach(other => {
       const overlap = Math.min(item.end, other.end) - Math.max(item.start, other.start);
@@ -450,6 +478,7 @@ function updateTripProgress() {
   let availableMinutes = 0;
   let plannedMinutes = 0;
   trip.days.forEach(day => {
+    if (day.isDayZero) return;
     const dayStart = timeToMinutes(day.startTime);
     availableMinutes += Math.max(0, planningEnd - dayStart);
     day.activities.forEach((activity, index) => {
@@ -468,6 +497,7 @@ function updateTripProgress() {
 function renderTimeline() {
   const trip = currentTrip();
   const range = dateRange(trip.startDate, trip.endDate);
+  const hasDayZero = trip.days[0]?.isDayZero === true;
   daysBoard.innerHTML = trip.days.map((day, dayIndex) => {
     const activities = day.activities;
     const timeConflicts = activityTimeConflicts(day);
@@ -477,25 +507,28 @@ function renderTimeline() {
       const conflicts = timeConflicts.get(index) || [];
       const isAccommodation = activity.type === 'accommodation';
       const isTransport = activity.type === 'transport';
-      const gap = isAccommodation ? '' : gapHtml(dayIndex, index, previousEnd, start);
-      if (!isAccommodation) previousEnd = start + Number(activity.duration);
+      const isPurchase = activity.type === 'purchase';
+      const isUntimed = isUntimedActivity(activity);
+      const gap = isUntimed ? '' : gapHtml(dayIndex, index, previousEnd, start);
+      if (!isUntimed) previousEnd = start + Number(activity.duration);
       const alternativeButtons = activity.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-action="select-activity-alternative" data-alternative-index="${alternativeIndex}">备选：${escapeHtml(alternative.title)}</button>`).join('');
-      const typeLabel = isAccommodation ? '住宿' : isTransport ? '交通' : '';
+      const typeLabel = isAccommodation ? '住宿' : isTransport ? '交通' : isPurchase ? '购买' : '';
       const routeHtml = isTransport ? `<div class="activity-route"><span>${escapeHtml(activity.fromLocation || '出发地点')}</span><b aria-label="前往">→</b><span>${escapeHtml(activity.toLocation || '到达地点')}</span></div>` : '';
-      const timeHtml = isAccommodation ? '<span>住宿</span>' : `<span>${formatTime(start)}</span><small>${activity.duration}分钟</small>`;
+      const timeHtml = isUntimed ? `<span>${isAccommodation ? '住宿' : '购买'}</span>` : `<span>${formatTime(start)}</span><small>${activity.duration}分钟</small>`;
       const conflictHtml = conflicts.length ? `<div class="time-overlap-warning" role="status">⚠ 时间重叠：${conflicts.map(conflict => `与「${escapeHtml(conflict.title)}」重叠 ${conflict.minutes} 分钟`).join('；')}</div>` : '';
-      return `${gap}<div class="activity${isAccommodation ? ' activity-accommodation' : ''}${isTransport ? ' activity-transport' : ''}${conflicts.length ? ' has-time-overlap' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
-        <div class="activity-card${activity.completed ? ' is-complete' : ''}${isAccommodation ? ' is-accommodation' : ''}${isTransport ? ' is-transport' : ''}${conflicts.length ? ' has-time-overlap' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="拖动安排：${escapeHtml(activity.title)}"><div class="activity-main"><div>${typeLabel ? `<span class="activity-type-label">${typeLabel}</span>` : ''}<h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
+      return `${gap}<div class="activity${isAccommodation ? ' activity-accommodation' : ''}${isTransport ? ' activity-transport' : ''}${isPurchase ? ' activity-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
+        <div class="activity-card${activity.completed ? ' is-complete' : ''}${isAccommodation ? ' is-accommodation' : ''}${isTransport ? ' is-transport' : ''}${isPurchase ? ' is-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="拖动安排：${escapeHtml(activity.title)}"><div class="activity-main"><div>${typeLabel ? `<span class="activity-type-label">${typeLabel}</span>` : ''}<h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
           <div class="activity-meta"><strong>${escapeHtml(activity.category)} ${formatCurrency(activityTotalForTrip(activity, trip), activity.currency)}</strong></div>
         <details class="activity-menu"><summary aria-label="更多操作" title="更多操作">⋮</summary><div class="activity-menu-items"><button data-action="toggle-complete" aria-pressed="${activity.completed}">${activity.completed ? '取消完成' : '标记完成'}</button><button data-action="up">上移</button><button data-action="down">下移</button><button data-action="edit">编辑</button><button data-action="add-alternative">添加备用安排</button><button data-action="delete">删除</button></div></details>
         ${conflictHtml}
         ${alternativeButtons ? `<div class="activity-alternatives"><span>备用方案：</span>${alternativeButtons}</div>` : ''}</div></div>`;
     }).join('') : '<div class="empty-state">暂无安排</div>';
     const date = new Date(range.start);
-    date.setDate(date.getDate() + dayIndex);
+    date.setDate(date.getDate() + dayDateOffset(day, dayIndex, hasDayZero));
+    const dayNumber = day.isDayZero ? 0 : dayIndex + 1 - (hasDayZero ? 1 : 0);
     const dayAlternatives = day.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-day="${dayIndex}" data-alternative-index="${alternativeIndex}" data-action="select-day-alternative">备用：${escapeHtml(alternative.name)}</button>`).join('');
     return `<section class="day-column" data-day="${dayIndex}">
-      <div class="day-column-header"><div><span class="day-label">DAY ${dayIndex + 1}</span><h3>${escapeHtml(day.title)}</h3><small>${formatDate(date)}</small></div><div class="day-plan-actions"><label class="day-start">开始 <input data-day-start="${dayIndex}" type="time" value="${day.startTime}"></label><button class="plan-button" data-day="${dayIndex}" data-action="add-day-alternative">＋ 备用整日</button>${dayAlternatives}</div></div>
+      <div class="day-column-header"><div><span class="day-label">DAY ${dayNumber}</span><h3>${escapeHtml(day.title)}</h3><small>${formatDate(date)}</small></div><div class="day-plan-actions"><label class="day-start">开始 <input data-day-start="${dayIndex}" type="time" value="${day.startTime}"></label><button class="plan-button" data-day="${dayIndex}" data-action="add-day-alternative">＋ 备用整日</button>${dayAlternatives}</div></div>
       <div class="timeline">${activityHtml}<button class="day-add-button" data-action="add-day-activity" data-day="${dayIndex}">＋ 添加安排</button></div>
     </section>`;
   }).join('');
@@ -649,6 +682,7 @@ function renderApp() {
   const trip = currentTrip();
   selectedDay = Math.min(selectedDay, trip.days.length - 1);
   renderTripHeader(); renderTimeline(); renderTodos(); updateCost();
+  updateDayZeroButton();
 }
 function setActivityCostMode(mode) {
   $('#activityCostMode').value = mode;
@@ -660,16 +694,16 @@ function setActivityCostMode(mode) {
 }
 function syncActivityTypeFields() {
   const type = $('#activityType').value;
-  const isAccommodation = type === 'accommodation';
+  const isUntimed = isUntimedActivity({ type });
   const isTransport = type === 'transport';
-  $('#activityTimeFields').hidden = isAccommodation;
+  $('#activityTimeFields').hidden = isUntimed;
   $('#transportLocationFields').hidden = !isTransport;
-  $('#activityStartTime').required = !isAccommodation;
-  $('#activityEndTime').required = !isAccommodation;
+  $('#activityStartTime').required = !isUntimed;
+  $('#activityEndTime').required = !isUntimed;
   $('#transportFrom').required = isTransport;
   $('#transportTo').required = isTransport;
-  if (!isAccommodation && Number($('#activityDuration').value) < 10) $('#activityDuration').value = 60;
-  if (!isAccommodation) syncActivityEndTime();
+  if (!isUntimed && Number($('#activityDuration').value) < 10) $('#activityDuration').value = 60;
+  if (!isUntimed) syncActivityEndTime();
 }
 function openEditor(index = -1) {
   editingIndex = index;
@@ -698,7 +732,7 @@ function openCurrencyDialog() {
 ['activityStartTime', 'activityDuration'].forEach(id => document.querySelector(`#${id}`).addEventListener('change', syncActivityEndTime));
 document.querySelector('#activityEndTime').addEventListener('change', syncActivityDuration);
 $('#activityType').addEventListener('change', event => {
-  const defaultCategory = { accommodation: '住宿费', transport: '交通费' }[event.target.value];
+  const defaultCategory = { accommodation: '住宿费', transport: '交通费', purchase: '旅行物品' }[event.target.value];
   if (defaultCategory) renderCategoryOptions(defaultCategory);
   syncActivityTypeFields();
 });
@@ -709,26 +743,26 @@ $('#costModeSwitch').addEventListener('click', event => {
 form.addEventListener('submit', event => {
   event.preventDefault();
   const type = $('#activityType').value;
-  const isAccommodation = type === 'accommodation';
-  const duration = isAccommodation ? 0 : Number($('#activityDuration').value);
-  if (!isAccommodation && (!Number.isInteger(duration) || duration < 10 || duration > 720)) return showToast('时长需为 10 - 720 分钟的整数');
-  const startTime = isAccommodation ? '' : $('#activityStartTime').value;
+  const isUntimed = isUntimedActivity({ type });
+  const duration = isUntimed ? 0 : Number($('#activityDuration').value);
+  if (!isUntimed && (!Number.isInteger(duration) || duration < 10 || duration > 720)) return showToast('时长需为 10 - 720 分钟的整数');
+  const startTime = isUntimed ? '' : $('#activityStartTime').value;
   const endTime = $('#activityEndTime').value;
-  if (!isAccommodation && (!startTime || !endTime || timeToMinutes(endTime) <= timeToMinutes(startTime))) return showToast('结束时间需晚于开始时间，暂不支持跨天安排');
-  if (!isAccommodation && timeToMinutes(endTime) - timeToMinutes(startTime) !== duration) return showToast('请修改结束时间或时长，使两者保持一致');
+  if (!isUntimed && (!startTime || !endTime || timeToMinutes(endTime) <= timeToMinutes(startTime))) return showToast('结束时间需晚于开始时间，暂不支持跨天安排');
+  if (!isUntimed && timeToMinutes(endTime) - timeToMinutes(startTime) !== duration) return showToast('请修改结束时间或时长，使两者保持一致');
   const fromLocation = $('#transportFrom').value.trim();
   const toLocation = $('#transportTo').value.trim();
   if (type === 'transport' && (!fromLocation || !toLocation)) return showToast('请填写交通行程的出发地点和到达地点');
   const activity = normalizeActivity({ type, fromLocation, toLocation, title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), category: $('#activityCategory').value, cost: Number($('#activityCost').value) || 0, currency: $('#activityCurrency').value, costMode: $('#activityCostMode').value, duration, time: startTime, timeLocked: Boolean(startTime) });
   if (!activity.title) return showToast('请填写安排名称');
   const day = currentTrip().days[selectedDay];
-  const suggestedTime = isAccommodation ? '' : formatTime(editingIndex >= 0 ? activityStartTime(day, editingIndex) : (newActivityTime ? timeToMinutes(newActivityTime) : activityStartTime(day, day.activities.length)));
-  activity.timeLocked = !isAccommodation && (addingActivityAlternative || startTime !== suggestedTime || Boolean(newActivityTime));
+  const suggestedTime = isUntimed ? '' : formatTime(editingIndex >= 0 ? activityStartTime(day, editingIndex) : (newActivityTime ? timeToMinutes(newActivityTime) : activityStartTime(day, day.activities.length)));
+  activity.timeLocked = !isUntimed && (addingActivityAlternative || startTime !== suggestedTime || Boolean(newActivityTime));
   if (addingActivityAlternative) {
     currentTrip().days[selectedDay].activities[editingIndex].alternatives.push(activity);
   } else if (editingIndex >= 0) {
     const updatedActivity = { ...currentTrip().days[selectedDay].activities[editingIndex], ...activity };
-    if (isAccommodation) delete updatedActivity.time;
+    if (isUntimed) delete updatedActivity.time;
     currentTrip().days[selectedDay].activities[editingIndex] = updatedActivity;
   }
   else {
@@ -817,24 +851,25 @@ function exportExcel() {
   const rows = [];
   const dayRanges = [];
   const startDate = new Date(`${trip.startDate}T00:00:00Z`);
-  const projectNames = { '交通费': '车票', '机票': '机票', '住宿费': '住宿', '餐饮费': '餐饮', '门票': '门票' };
+  const projectNames = { '交通费': '车票', '机票': '机票', '住宿费': '住宿', '旅行物品': '旅行物品', '餐饮费': '餐饮', '门票': '门票' };
+  const hasDayZero = trip.days[0]?.isDayZero === true;
   trip.days.forEach((day, dayIndex) => {
     if (!day.activities.length) return;
     const date = new Date(startDate);
-    date.setUTCDate(date.getUTCDate() + dayIndex);
+    date.setUTCDate(date.getUTCDate() + dayDateOffset(day, dayIndex, hasDayZero));
     const dateLabel = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
     const weekday = date.getUTCDay() || 7;
     const firstRow = rows.length + 2;
     day.activities.forEach((activity, index) => {
-      const isAccommodation = activity.type === 'accommodation';
-      const start = isAccommodation ? '' : formatTime(activityStartTime(day, index));
-      const end = isAccommodation ? '' : endTimeFor(start, activity.duration);
+      const isUntimed = isUntimedActivity(activity);
+      const start = isUntimed ? '' : formatTime(activityStartTime(day, index));
+      const end = isUntimed ? '' : endTimeFor(start, activity.duration);
       const expenseType = expenseCategory(activity.category);
       const people = activity.costMode === 'perPerson'
         ? (expenseType ? trip.familyMembers.reduce((sum, member) => sum + member.weights[expenseType], 0) : trip.members)
         : 1;
       rows.push([
-        dateLabel, weekday, isAccommodation ? '住宿（不限时）' : `${start}-${end}`,
+        dateLabel, weekday, isUntimed ? `${activity.type === 'purchase' ? '购买' : '住宿'}（不限时）` : `${start}-${end}`,
         [activity.title, activity.type === 'transport' ? `${activity.fromLocation} → ${activity.toLocation}` : '', activity.detail].filter(Boolean).join(' · '),
         projectNames[activity.category] || activity.category,
         Number(activity.cost || 0), people, activityTotalForTrip(activity, trip)
@@ -1050,6 +1085,7 @@ $('#doneCategory').addEventListener('click', () => categoryDialog.close());
 $('#closeCategoryDialog').addEventListener('click', () => categoryDialog.close());
 categoryForm.addEventListener('submit', event => { event.preventDefault(); categoryDialog.close(); });
 document.querySelector('#editTripButton').addEventListener('click', openEditTripDialog);
+$('#toggleDayZero').addEventListener('click', toggleDayZero);
 ['editTripStart', 'editTripEnd'].forEach(id => document.querySelector(`#${id}`).addEventListener('change', updateEditTripDaysHint));
 ['closeTripDialog', 'cancelTripDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => tripDialog.close()));
 ['closeEditTripDialog', 'cancelEditTripDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => editTripDialog.close()));
@@ -1087,15 +1123,23 @@ editTripForm.addEventListener('submit', event => {
   const endDate = $('#editTripEnd').value;
   const range = dateRange(startDate, endDate);
   if (!startDate || !endDate || range.days < 1 || range.days > 31) return showToast('日期范围需为 1 到 31 天');
-  const removedDays = trip.days.slice(range.days);
+  const hasDayZero = trip.days[0]?.isDayZero === true;
+  const preparationDays = hasDayZero ? trip.days.slice(0, 1) : [];
+  const previousDays = hasDayZero ? trip.days.slice(1) : trip.days;
+  const removedDays = previousDays.slice(range.days);
   const hasContent = removedDays.some(day => day.activities.length || day.alternatives.length);
   if (hasContent && !$('#editTripConfirmRemove').checked) return showToast('请确认是否删除缩短天数后的超出安排');
-  const previousDays = trip.days;
   trip.name = name;
   trip.startDate = startDate;
   trip.endDate = endDate;
-  trip.days = Array.from({ length: range.days }, (_, index) => previousDays[index] || ({ title: index === 0 ? `抵达 · ${trip.destination}` : `第 ${index + 1} 天`, startTime: '09:00', activities: [], alternatives: [] }));
-  trip.days.forEach((day, index) => { if (!day.title || /^第 \d+ 天$/.test(day.title)) day.title = index === 0 ? `抵达 · ${trip.destination}` : `第 ${index + 1} 天`; });
+  trip.days = [...preparationDays, ...Array.from({ length: range.days }, (_, index) => previousDays[index] || ({ title: index === 0 ? `抵达 · ${trip.destination}` : `第 ${index + 1} 天`, startTime: '09:00', activities: [], alternatives: [] }))];
+  trip.days.forEach((day, index) => {
+    if (day.isDayZero) day.title = '行前准备';
+    else if (!day.title || /^第 \d+ 天$/.test(day.title)) {
+      const dayNumber = index - (hasDayZero ? 1 : 0);
+      day.title = dayNumber === 0 ? `抵达 · ${trip.destination}` : `第 ${dayNumber + 1} 天`;
+    }
+  });
   selectedDay = Math.min(selectedDay, trip.days.length - 1);
   persist();
   editTripDialog.close();

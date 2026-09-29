@@ -2,6 +2,11 @@
   display: none;
 }
 
+.day-zero-toggle {
+  flex: none;
+  margin-left: 12px;
+}
+
 .activity-type-label {
   display: inline-block;
   margin-bottom: 4px;
@@ -41,6 +46,25 @@
   color: #397894;
 }
 
+.activity-card.is-purchase {
+  border-color: #efe1c4;
+  background: #fffdf8;
+}
+
+.activity-purchase .time {
+  color: #9c7a38;
+  font-weight: 600;
+}
+
+.activity-purchase .activity-dot {
+  border-color: #c39a46;
+}
+
+.activity-card.is-purchase .activity-type-label {
+  background: #f8efd9;
+  color: #8b6a2d;
+}
+
 .activity-route {
   display: flex;
   align-items: center;
@@ -65,4 +89,12 @@
 
 .activity-card.is-transport .activity-main p {
   margin-top: 5px;
+}
+
+@media (max-width: 680px) {
+  .day-zero-toggle {
+    padding: 8px 10px;
+    margin-left: 4px;
+    font-size: 10px;
+  }
 }
