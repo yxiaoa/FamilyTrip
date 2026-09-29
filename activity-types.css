@@ -1,0 +1,68 @@
+.form-grid[hidden] {
+  display: none;
+}
+
+.activity-type-label {
+  display: inline-block;
+  margin-bottom: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #f1ecff;
+  color: #7762ad;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.activity-card.is-accommodation {
+  border-color: #e4ddf3;
+  background: #fcfaff;
+}
+
+.activity-accommodation .time {
+  color: #7762ad;
+  font-weight: 600;
+}
+
+.activity-accommodation .activity-dot {
+  border-color: #9b88c8;
+}
+
+.activity-card.is-transport {
+  border-color: #d4e4ed;
+  background: #f8fcfe;
+}
+
+.activity-transport .activity-dot {
+  border-color: #5b9cba;
+}
+
+.activity-card.is-transport .activity-type-label {
+  background: #e5f2f8;
+  color: #397894;
+}
+
+.activity-route {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+  color: #397894;
+  font-size: 10px;
+}
+
+.activity-route span {
+  overflow-wrap: anywhere;
+}
+
+.activity-route b {
+  flex: none;
+  color: #79a9bf;
+}
+
+.activity-card.is-transport .activity-main > div {
+  min-width: 0;
+}
+
+.activity-card.is-transport .activity-main p {
+  margin-top: 5px;
+}

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>行迹 · 家庭旅行排程器</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="activity-types.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -30,7 +31,7 @@
           <div class="summary-card"><div class="summary-icon coral">♧</div><div><span>同行人员</span><strong id="memberCount">4 人</strong><small id="memberHint">2 位成人 · 2 位儿童</small></div></div>
           <div class="summary-card"><div class="summary-icon blue">⌁</div><div><span>总路程</span><strong>42.8 km</strong><small>预计车程 2小时18分</small></div></div>
           <div class="summary-card expense-summary"><div class="summary-icon green">¥</div><div><span>预计总花费</span><strong id="totalCost">¥ 18,460</strong><small>人均 <span id="perPerson">¥ 4,615</span></small></div><div class="currency-actions"><select id="displayCurrency" aria-label="费用显示币种"><option value="CNY">CNY</option><option value="JPY">JPY</option><option value="USD">USD</option><option value="HKD">HKD</option><option value="EUR">EUR</option></select><button class="link-button" type="button" id="currencySettings">汇率</button></div></div>
-          <div class="summary-card"><div class="summary-icon purple">◷</div><div><span>行程完成度</span><strong>35%</strong><div class="progress"><i></i></div></div></div>
+          <div class="summary-card"><div class="summary-icon purple">◷</div><div class="trip-progress-summary"><span>行程完成度</span><div class="trip-progress-metric"><span>已完成</span><strong id="tripProgress">0%</strong></div><div class="progress" role="progressbar" aria-label="已完成行程比例" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="tripProgressBar"></i></div><small id="tripProgressCount">0 / 0 项安排已完成</small><div class="trip-progress-metric"><span>计划完成度</span><strong id="tripPlanProgress">0%</strong></div><div class="progress" role="progressbar" aria-label="计划完成度，按每天开始时间至21:00的可排时段计算" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="tripPlanProgressBar"></i></div><small id="tripPlanProgressCount" title="按每天开始时间至21:00的可排时段计算">0 / 0 小时已安排</small></div></div>
         </section>
 
         <section class="workspace">
@@ -54,9 +55,12 @@
     <dialog id="activityDialog" class="activity-dialog">
       <form method="dialog" id="activityForm">
         <div class="dialog-heading"><div><span class="day-label" id="dialogMode">新增安排</span><h2 id="dialogTitle">添加行程</h2></div><button class="close-dialog" type="button" id="closeActivityDialog" aria-label="关闭">×</button></div>
+        <label>安排类型<select id="activityType"><option value="activity">普通活动</option><option value="accommodation">住宿</option><option value="transport">交通</option></select></label>
         <label>安排名称<input id="activityName" required maxlength="40" placeholder="例如：参观二条城"></label>
         <label>详细说明<input id="activityDetail" maxlength="80" placeholder="地点、交通或备注"></label>
-        <div class="form-grid"><label>开始时间<input id="activityStartTime" type="time" required></label><label>结束时间<input id="activityEndTime" type="time" required></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="5" value="60"></label><label>费用类别<select id="activityCategory"></select><button class="inline-link" type="button" id="manageCategories">管理类别</button></label><label>费用金额<input id="activityCost" type="number" min="0" step="0.01" value="0"></label><label>费用币种<select id="activityCurrency"><option value="CNY">人民币 CNY</option><option value="JPY">日元 JPY</option><option value="USD">美元 USD</option><option value="HKD">港币 HKD</option><option value="EUR">欧元 EUR</option></select></label><label>计费方式<select id="activityCostMode"><option value="total">总费用</option><option value="perPerson">人均费用</option></select></label></div>
+        <div class="form-grid time-fields" id="activityTimeFields"><label>开始时间<input id="activityStartTime" type="time" required></label><label>结束时间<input id="activityEndTime" type="time" required></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="5" value="60"></label></div>
+        <div class="form-grid location-fields" id="transportLocationFields" hidden><label>出发地点<input id="transportFrom" maxlength="60" placeholder="例如：关西机场"></label><label>到达地点<input id="transportTo" maxlength="60" placeholder="例如：京都站"></label></div>
+        <div class="form-grid"><label>费用类别<select id="activityCategory"></select><button class="inline-link" type="button" id="manageCategories">管理类别</button></label><div class="cost-field"><label for="activityCost">费用金额</label><div class="cost-entry"><div class="cost-mode-switch" id="costModeSwitch" role="group" aria-label="计费方式"><button type="button" class="active" data-cost-mode="total" aria-pressed="true">总费用</button><button type="button" data-cost-mode="perPerson" aria-pressed="false">人均</button></div><input id="activityCost" type="number" min="0" step="0.01" value="0" aria-label="费用金额"></div><input id="activityCostMode" type="hidden" value="total"></div><label>费用币种<select id="activityCurrency"><option value="CNY">人民币 CNY</option><option value="JPY">日元 JPY</option><option value="USD">美元 USD</option><option value="HKD">港币 HKD</option><option value="EUR">欧元 EUR</option></select></label></div>
         <div class="dialog-actions"><button class="button secondary" type="button" id="cancelActivityDialog">取消</button><button class="button primary" id="saveActivity" value="default">保存安排</button></div>
       </form>
     </dialog>

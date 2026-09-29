@@ -13,7 +13,7 @@ const seedDays = [
   ...['岚山竹林 · 渡月桥', '伏见稻荷 · 宇治抹茶', '奈良一日 · 与鹿相遇', '返程 · 带着春色回家'].map(title => ({ title, startTime: '09:00', activities: [] }))
 ];
 const stateKey = 'familyTripPlanner';
-const CURRENT_SCHEMA_VERSION = 6;
+const CURRENT_SCHEMA_VERSION = 7;
 const builtInCategories = ['交通费', '机票', '住宿费', '餐饮费', '门票', '其他'];
 const supportedCurrencies = ['CNY', 'JPY', 'USD', 'HKD', 'EUR'];
 const defaultExchangeRates = { CNY: 1, JPY: 0.05, USD: 7.2, HKD: 0.92, EUR: 7.8 };
@@ -189,7 +189,10 @@ function normalizeMember(member, index) {
 }
 function normalizeActivity(activity) {
   const alternatives = Array.isArray(activity.alternatives) ? activity.alternatives.map(item => normalizeActivity({ ...item, alternatives: [] })) : [];
-  return { ...activity, category: activity.category || '其他', costMode: activity.costMode === 'perPerson' ? 'perPerson' : 'total', cost: Math.max(0, Number(activity.cost) || 0), currency: supportedCurrencies.includes(activity.currency) ? activity.currency : 'CNY', timeLocked: activity.timeLocked === true, alternatives };
+  const type = ['accommodation', 'transport'].includes(activity.type) ? activity.type : 'activity';
+  const normalized = { ...activity, type, fromLocation: String(activity.fromLocation || ''), toLocation: String(activity.toLocation || ''), duration: type === 'accommodation' ? 0 : Number(activity.duration) || 60, category: activity.category || '其他', costMode: activity.costMode === 'perPerson' ? 'perPerson' : 'total', cost: Math.max(0, Number(activity.cost) || 0), currency: supportedCurrencies.includes(activity.currency) ? activity.currency : 'CNY', timeLocked: type !== 'accommodation' && activity.timeLocked === true, completed: activity.completed === true, alternatives };
+  if (type === 'accommodation') delete normalized.time;
+  return normalized;
 }
 function normalizeDayAlternative(alternative) {
   return { id: alternative.id || `day-option-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: alternative.name || '备用方案', activities: Array.isArray(alternative.activities) ? alternative.activities.map(normalizeActivity) : [] };
@@ -393,16 +396,46 @@ function activityStartTime(day, index) {
   let current = timeToMinutes(day.startTime);
   for (let itemIndex = 0; itemIndex < index; itemIndex += 1) {
     const item = day.activities[itemIndex];
+    if (item.type === 'accommodation') continue;
     if (item.timeLocked && item.time) current = Math.max(current, timeToMinutes(item.time));
     current += Number(item.duration);
   }
   const activity = day.activities[index];
+  if (activity?.type === 'accommodation') return current;
   return activity?.timeLocked && activity.time ? Math.max(current, timeToMinutes(activity.time)) : current;
 }
 function gapHtml(dayIndex, insertIndex, start, end) {
   const duration = end - start;
   if (duration < 10) return '';
   return `<div class="schedule-gap"><span>无行程 · ${Math.floor(duration / 60)}小时${duration % 60 ? `${duration % 60}分钟` : ''}</span><button class="gap-add" data-action="insert-activity" data-day="${dayIndex}" data-insert-index="${insertIndex}" data-insert-time="${formatTime(start)}">＋ 插入安排</button></div>`;
+}
+function updateTripProgress() {
+  const trip = currentTrip();
+  const activities = trip.days.flatMap(day => day.activities);
+  const completed = activities.filter(activity => activity.completed).length;
+  const percentage = activities.length ? Math.round(completed / activities.length * 100) : 0;
+  $('#tripProgress').textContent = `${percentage}%`;
+  $('#tripProgressBar').style.width = `${percentage}%`;
+  $('#tripProgressBar').parentElement.setAttribute('aria-valuenow', percentage);
+  $('#tripProgressCount').textContent = `${completed} / ${activities.length} 项安排已完成`;
+  const planningEnd = 21 * 60;
+  let availableMinutes = 0;
+  let plannedMinutes = 0;
+  trip.days.forEach(day => {
+    const dayStart = timeToMinutes(day.startTime);
+    availableMinutes += Math.max(0, planningEnd - dayStart);
+    day.activities.forEach((activity, index) => {
+      const activityStart = activityStartTime(day, index);
+      const activityEnd = activityStart + Math.max(0, Number(activity.duration) || 0);
+      plannedMinutes += Math.max(0, Math.min(activityEnd, planningEnd) - Math.max(activityStart, dayStart));
+    });
+  });
+  const planPercentage = availableMinutes ? Math.min(100, Math.round(plannedMinutes / availableMinutes * 100)) : 0;
+  const formatHours = minutes => (minutes / 60).toLocaleString('zh-CN', { maximumFractionDigits: 1 });
+  $('#tripPlanProgress').textContent = `${planPercentage}%`;
+  $('#tripPlanProgressBar').style.width = `${planPercentage}%`;
+  $('#tripPlanProgressBar').parentElement.setAttribute('aria-valuenow', planPercentage);
+  $('#tripPlanProgressCount').textContent = `${formatHours(plannedMinutes)} / ${formatHours(availableMinutes)} 小时已安排`;
 }
 function renderTimeline() {
   const trip = currentTrip();
@@ -412,13 +445,18 @@ function renderTimeline() {
     let previousEnd = timeToMinutes(day.startTime);
     const activityHtml = activities.length ? activities.map((activity, index) => {
       const start = activityStartTime(day, index);
-      const gap = gapHtml(dayIndex, index, previousEnd, start);
-      previousEnd = start + Number(activity.duration);
+      const isAccommodation = activity.type === 'accommodation';
+      const isTransport = activity.type === 'transport';
+      const gap = isAccommodation ? '' : gapHtml(dayIndex, index, previousEnd, start);
+      if (!isAccommodation) previousEnd = start + Number(activity.duration);
       const alternativeButtons = activity.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-action="select-activity-alternative" data-alternative-index="${alternativeIndex}">备选：${escapeHtml(alternative.title)}</button>`).join('');
-      return `${gap}<div class="activity"><div class="time"><span>${formatTime(start)}</span><small>${activity.duration}分钟</small></div><span class="activity-dot"></span>
-        <div class="activity-card" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="拖动安排：${escapeHtml(activity.title)}"><div class="activity-main"><div><h4>${escapeHtml(activity.title)}</h4>${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
+      const typeLabel = isAccommodation ? '住宿' : isTransport ? '交通' : '';
+      const routeHtml = isTransport ? `<div class="activity-route"><span>${escapeHtml(activity.fromLocation || '出发地点')}</span><b aria-label="前往">→</b><span>${escapeHtml(activity.toLocation || '到达地点')}</span></div>` : '';
+      const timeHtml = isAccommodation ? '<span>住宿</span>' : `<span>${formatTime(start)}</span><small>${activity.duration}分钟</small>`;
+      return `${gap}<div class="activity${isAccommodation ? ' activity-accommodation' : ''}${isTransport ? ' activity-transport' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
+        <div class="activity-card${activity.completed ? ' is-complete' : ''}${isAccommodation ? ' is-accommodation' : ''}${isTransport ? ' is-transport' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="拖动安排：${escapeHtml(activity.title)}"><div class="activity-main"><div>${typeLabel ? `<span class="activity-type-label">${typeLabel}</span>` : ''}<h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
           <div class="activity-meta"><strong>${escapeHtml(activity.category)} ${formatCurrency(activityTotalForTrip(activity, trip), activity.currency)}</strong></div>
-        <details class="activity-menu"><summary aria-label="更多操作" title="更多操作">⋮</summary><div class="activity-menu-items"><button data-action="up">上移</button><button data-action="down">下移</button><button data-action="edit">编辑</button><button data-action="add-alternative">添加备用安排</button><button data-action="delete">删除</button></div></details>
+        <details class="activity-menu"><summary aria-label="更多操作" title="更多操作">⋮</summary><div class="activity-menu-items"><button data-action="toggle-complete" aria-pressed="${activity.completed}">${activity.completed ? '取消完成' : '标记完成'}</button><button data-action="up">上移</button><button data-action="down">下移</button><button data-action="edit">编辑</button><button data-action="add-alternative">添加备用安排</button><button data-action="delete">删除</button></div></details>
         ${alternativeButtons ? `<div class="activity-alternatives"><span>备用方案：</span>${alternativeButtons}</div>` : ''}</div></div>`;
     }).join('') : '<div class="empty-state">暂无安排</div>';
     const date = new Date(range.start);
@@ -429,6 +467,7 @@ function renderTimeline() {
       <div class="timeline">${activityHtml}<button class="day-add-button" data-action="add-day-activity" data-day="${dayIndex}">＋ 添加安排</button></div>
     </section>`;
   }).join('');
+  updateTripProgress();
   daysBoard.querySelectorAll('.activity-card, .day-plan-actions [data-action], .schedule-gap [data-action], .day-add-button').forEach(card => card.addEventListener('click', event => {
     const actionElement = event.target.closest('[data-action]');
     const action = actionElement?.dataset.action;
@@ -437,6 +476,10 @@ function renderTimeline() {
     const dayIndex = Number(card.dataset.day);
     const index = Number(card.dataset.index);
     const activities = trip.days[dayIndex].activities;
+    if (action === 'toggle-complete') {
+      activities[index].completed = !activities[index].completed;
+      persist(); renderTimeline(); return;
+    }
     if (action === 'add-day-activity') {
       selectedDay = dayIndex; insertingActivityIndex = activities.length; newActivityTime = ''; openEditor(); return;
     }
@@ -575,14 +618,40 @@ function renderApp() {
   selectedDay = Math.min(selectedDay, trip.days.length - 1);
   renderTripHeader(); renderTimeline(); renderTodos(); updateCost();
 }
+function setActivityCostMode(mode) {
+  $('#activityCostMode').value = mode;
+  $('#costModeSwitch').querySelectorAll('[data-cost-mode]').forEach(button => {
+    const selected = button.dataset.costMode === mode;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+}
+function syncActivityTypeFields() {
+  const type = $('#activityType').value;
+  const isAccommodation = type === 'accommodation';
+  const isTransport = type === 'transport';
+  $('#activityTimeFields').hidden = isAccommodation;
+  $('#transportLocationFields').hidden = !isTransport;
+  $('#activityStartTime').required = !isAccommodation;
+  $('#activityEndTime').required = !isAccommodation;
+  $('#transportFrom').required = isTransport;
+  $('#transportTo').required = isTransport;
+  if (!isAccommodation && Number($('#activityDuration').value) < 10) $('#activityDuration').value = 60;
+  if (!isAccommodation) syncActivityEndTime();
+}
 function openEditor(index = -1) {
   editingIndex = index;
-  const activity = index >= 0 ? currentTrip().days[selectedDay].activities[index] : { title: '', detail: '', category: '其他', cost: 0, costMode: 'total', duration: 60 };
+  const activity = index >= 0 ? currentTrip().days[selectedDay].activities[index] : { type: 'activity', title: '', detail: '', category: '其他', cost: 0, costMode: 'total', duration: 60 };
   $('#dialogMode').textContent = addingActivityAlternative ? '新增活动备用方案' : (index >= 0 ? '编辑安排' : '新增安排');
   $('#dialogTitle').textContent = index >= 0 ? activity.title : '添加行程';
   $('#activityName').value = activity.title; $('#activityDetail').value = activity.detail;
-  renderCategoryOptions(activity.category || '其他'); $('#activityCost').value = activity.cost; $('#activityCurrency').value = activity.currency || 'CNY'; $('#activityCostMode').value = activity.costMode || 'total'; $('#activityDuration').value = activity.duration;
-  $('#activityStartTime').value = index >= 0 && activity.timeLocked ? activity.time : newActivityTime || formatTime(index >= 0 ? activityStartTime(currentTrip().days[selectedDay], index) : activityStartTime(currentTrip().days[selectedDay], currentTrip().days[selectedDay].activities.length));
+  $('#activityType').value = activity.type || 'activity';
+  $('#transportFrom').value = activity.fromLocation || '';
+  $('#transportTo').value = activity.toLocation || '';
+  renderCategoryOptions(activity.category || '其他'); $('#activityCost').value = activity.cost; $('#activityCurrency').value = activity.currency || 'CNY'; setActivityCostMode(activity.costMode || 'total'); $('#activityDuration').value = activity.duration;
+  const day = currentTrip().days[selectedDay];
+  $('#activityStartTime').value = index >= 0 && activity.timeLocked ? activity.time : newActivityTime || formatTime(activityStartTime(day, index >= 0 ? index : day.activities.length));
+  syncActivityTypeFields();
   syncActivityEndTime();
   dialog.showModal(); $('#activityName').focus();
 }
@@ -596,22 +665,36 @@ function openCurrencyDialog() {
 }
 ['activityStartTime', 'activityDuration'].forEach(id => document.querySelector(`#${id}`).addEventListener('change', syncActivityEndTime));
 document.querySelector('#activityEndTime').addEventListener('change', syncActivityDuration);
+$('#activityType').addEventListener('change', syncActivityTypeFields);
+$('#costModeSwitch').addEventListener('click', event => {
+  const button = event.target.closest('[data-cost-mode]');
+  if (button) setActivityCostMode(button.dataset.costMode);
+});
 form.addEventListener('submit', event => {
   event.preventDefault();
-  const duration = Number($('#activityDuration').value);
-  if (!Number.isInteger(duration) || duration < 10 || duration > 720) return showToast('时长需为 10 - 720 分钟的整数');
-  const startTime = $('#activityStartTime').value;
+  const type = $('#activityType').value;
+  const isAccommodation = type === 'accommodation';
+  const duration = isAccommodation ? 0 : Number($('#activityDuration').value);
+  if (!isAccommodation && (!Number.isInteger(duration) || duration < 10 || duration > 720)) return showToast('时长需为 10 - 720 分钟的整数');
+  const startTime = isAccommodation ? '' : $('#activityStartTime').value;
   const endTime = $('#activityEndTime').value;
-  if (!startTime || !endTime || timeToMinutes(endTime) <= timeToMinutes(startTime)) return showToast('结束时间需晚于开始时间，暂不支持跨天安排');
-  if (timeToMinutes(endTime) - timeToMinutes(startTime) !== duration) return showToast('请修改结束时间或时长，使两者保持一致');
-  const activity = normalizeActivity({ title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), category: $('#activityCategory').value, cost: Number($('#activityCost').value) || 0, currency: $('#activityCurrency').value, costMode: $('#activityCostMode').value, duration, time: startTime, timeLocked: Boolean(startTime) });
+  if (!isAccommodation && (!startTime || !endTime || timeToMinutes(endTime) <= timeToMinutes(startTime))) return showToast('结束时间需晚于开始时间，暂不支持跨天安排');
+  if (!isAccommodation && timeToMinutes(endTime) - timeToMinutes(startTime) !== duration) return showToast('请修改结束时间或时长，使两者保持一致');
+  const fromLocation = $('#transportFrom').value.trim();
+  const toLocation = $('#transportTo').value.trim();
+  if (type === 'transport' && (!fromLocation || !toLocation)) return showToast('请填写交通行程的出发地点和到达地点');
+  const activity = normalizeActivity({ type, fromLocation, toLocation, title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), category: $('#activityCategory').value, cost: Number($('#activityCost').value) || 0, currency: $('#activityCurrency').value, costMode: $('#activityCostMode').value, duration, time: startTime, timeLocked: Boolean(startTime) });
   if (!activity.title) return showToast('请填写安排名称');
   const day = currentTrip().days[selectedDay];
-  const suggestedTime = formatTime(editingIndex >= 0 ? activityStartTime(day, editingIndex) : (newActivityTime ? timeToMinutes(newActivityTime) : activityStartTime(day, day.activities.length)));
-  activity.timeLocked = addingActivityAlternative || startTime !== suggestedTime || Boolean(newActivityTime);
+  const suggestedTime = isAccommodation ? '' : formatTime(editingIndex >= 0 ? activityStartTime(day, editingIndex) : (newActivityTime ? timeToMinutes(newActivityTime) : activityStartTime(day, day.activities.length)));
+  activity.timeLocked = !isAccommodation && (addingActivityAlternative || startTime !== suggestedTime || Boolean(newActivityTime));
   if (addingActivityAlternative) {
     currentTrip().days[selectedDay].activities[editingIndex].alternatives.push(activity);
-  } else if (editingIndex >= 0) currentTrip().days[selectedDay].activities[editingIndex] = { ...currentTrip().days[selectedDay].activities[editingIndex], ...activity };
+  } else if (editingIndex >= 0) {
+    const updatedActivity = { ...currentTrip().days[selectedDay].activities[editingIndex], ...activity };
+    if (isAccommodation) delete updatedActivity.time;
+    currentTrip().days[selectedDay].activities[editingIndex] = updatedActivity;
+  }
   else {
     if (!activity.timeLocked) delete activity.time;
     currentTrip().days[selectedDay].activities.splice(insertingActivityIndex < 0 ? currentTrip().days[selectedDay].activities.length : insertingActivityIndex, 0, activity);
@@ -707,15 +790,16 @@ function exportExcel() {
     const weekday = date.getUTCDay() || 7;
     const firstRow = rows.length + 2;
     day.activities.forEach((activity, index) => {
-      const start = formatTime(activityStartTime(day, index));
-      const end = endTimeFor(start, activity.duration);
+      const isAccommodation = activity.type === 'accommodation';
+      const start = isAccommodation ? '' : formatTime(activityStartTime(day, index));
+      const end = isAccommodation ? '' : endTimeFor(start, activity.duration);
       const expenseType = expenseCategory(activity.category);
       const people = activity.costMode === 'perPerson'
         ? (expenseType ? trip.familyMembers.reduce((sum, member) => sum + member.weights[expenseType], 0) : trip.members)
         : 1;
       rows.push([
-        dateLabel, weekday, `${start}-${end}`,
-        [activity.title, activity.detail].filter(Boolean).join(' · '),
+        dateLabel, weekday, isAccommodation ? '住宿（不限时）' : `${start}-${end}`,
+        [activity.title, activity.type === 'transport' ? `${activity.fromLocation} → ${activity.toLocation}` : '', activity.detail].filter(Boolean).join(' · '),
         projectNames[activity.category] || activity.category,
         Number(activity.cost || 0), people, activityTotalForTrip(activity, trip)
       ]);
