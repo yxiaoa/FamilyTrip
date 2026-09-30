@@ -7,17 +7,6 @@
   margin-left: 12px;
 }
 
-.activity-type-label {
-  display: inline-block;
-  margin-bottom: 4px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: #f1ecff;
-  color: #7762ad;
-  font-size: 9px;
-  line-height: 1.4;
-}
-
 .activity-card.is-accommodation {
   border-color: #e4ddf3;
   background: #fcfaff;
@@ -41,11 +30,6 @@
   border-color: #5b9cba;
 }
 
-.activity-card.is-transport .activity-type-label {
-  background: #e5f2f8;
-  color: #397894;
-}
-
 .activity-card.is-purchase {
   border-color: #efe1c4;
   background: #fffdf8;
@@ -58,11 +42,6 @@
 
 .activity-purchase .activity-dot {
   border-color: #c39a46;
-}
-
-.activity-card.is-purchase .activity-type-label {
-  background: #f8efd9;
-  color: #8b6a2d;
 }
 
 .activity-route {
