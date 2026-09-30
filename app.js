@@ -47,6 +47,7 @@ let editingAlternativeIndex = -1;
 let addingActivityAlternative = false;
 let addingDayAlternativeIndex = -1;
 let insertingActivityIndex = -1;
+let insertingAroundActivity = false;
 let newActivityTime = '';
 const daysBoard = document.querySelector('#daysBoard');
 const toast = document.querySelector('#toast');
@@ -538,7 +539,7 @@ function renderTimeline() {
       return `${gap}<div class="activity${!activity.hasTime ? ' activity-untimed' : ''}${isTransport ? ' activity-transport' : ''}${isPurchase ? ' activity-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
         <div class="activity-card${activity.completed ? ' is-complete' : ''}${!activity.hasTime ? ' is-untimed' : ''}${isTransport ? ' is-transport' : ''}${isPurchase ? ' is-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="拖动安排：${escapeHtml(activity.title)}"><div class="activity-main"><div><h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
           ${activity.hasCost ? `<div class="activity-meta"><strong>${escapeHtml(activity.category)} ${formatCurrency(activityTotalForTrip(activity, trip), activity.currency)}</strong></div>` : ''}
-        <details class="activity-menu"><summary aria-label="更多操作" title="更多操作">⋮</summary><div class="activity-menu-items"><button data-action="toggle-complete" aria-pressed="${activity.completed}">${activity.completed ? '取消完成' : '标记完成'}</button><button data-action="up">上移</button><button data-action="down">下移</button><button data-action="edit">编辑</button><button data-action="add-alternative">添加备用安排</button><button data-action="delete">删除</button></div></details>
+        <details class="activity-menu"><summary aria-label="更多操作" title="更多操作">⋮</summary><div class="activity-menu-items"><button data-action="toggle-complete" aria-pressed="${activity.completed}">${activity.completed ? '取消完成' : '标记完成'}</button><button data-action="up">上移</button><button data-action="down">下移</button><button data-action="insert-before">在之前插入行程</button><button data-action="insert-after">在之后插入行程</button><button data-action="edit">编辑</button><button data-action="add-alternative">添加备用安排</button><button data-action="delete">删除</button></div></details>
         ${conflictHtml}
         ${alternativeButtons ? `<div class="activity-alternatives"><span>备用方案：</span>${alternativeButtons}</div>` : ''}</div></div>`;
     }).join('') : '<div class="empty-state">暂无安排</div>';
@@ -565,10 +566,19 @@ function renderTimeline() {
       persist(); renderTimeline(); return;
     }
     if (action === 'add-day-activity') {
-      selectedDay = dayIndex; insertingActivityIndex = activities.length; newActivityTime = ''; openEditor(); return;
+      selectedDay = dayIndex; insertingActivityIndex = activities.length; insertingAroundActivity = false; newActivityTime = ''; openEditor(); return;
     }
     if (action === 'insert-activity') {
-      selectedDay = dayIndex; insertingActivityIndex = Number(actionElement.dataset.insertIndex); newActivityTime = actionElement.dataset.insertTime; openEditor(); return;
+      selectedDay = dayIndex; insertingActivityIndex = Number(actionElement.dataset.insertIndex); insertingAroundActivity = false; newActivityTime = actionElement.dataset.insertTime; openEditor(); return;
+    }
+    if (action === 'insert-before' || action === 'insert-after') {
+      selectedDay = dayIndex;
+      insertingActivityIndex = index + (action === 'insert-after' ? 1 : 0);
+      insertingAroundActivity = true;
+      newActivityTime = '';
+      addingActivityAlternative = false;
+      openEditor();
+      return;
     }
     if (action === 'select-day-alternative') {
       const alternativeIndex = Number(actionElement.dataset.alternativeIndex);
@@ -735,7 +745,7 @@ function syncActivityTypeFields() {
 function openEditor(index = -1) {
   editingIndex = index;
   const activity = index >= 0 ? currentTrip().days[selectedDay].activities[index] : { type: 'activity', title: '', detail: '', category: '其他', cost: 0, costMode: 'total', duration: 60, hasTime: true, hasCost: true };
-  $('#dialogMode').textContent = addingActivityAlternative ? '新增活动备用方案' : (index >= 0 ? '编辑安排' : '新增安排');
+  $('#dialogMode').textContent = addingActivityAlternative ? '新增活动备用方案' : (insertingAroundActivity ? '插入行程' : (index >= 0 ? '编辑安排' : '新增安排'));
   $('#dialogTitle').textContent = index >= 0 ? activity.title : '添加行程';
   $('#activityName').value = activity.title; $('#activityDetail').value = activity.detail;
   $('#activityType').value = activity.type || 'activity';
@@ -743,7 +753,8 @@ function openEditor(index = -1) {
   $('#transportTo').value = activity.toLocation || '';
   renderCategoryOptions(activity.category || '其他'); $('#activityCost').value = activity.cost; $('#activityCurrency').value = activity.currency || 'CNY'; setActivityCostMode(activity.costMode || 'total'); $('#activityDuration').value = activity.duration;
   const day = currentTrip().days[selectedDay];
-  $('#activityStartTime').value = index >= 0 && activity.timeLocked ? activity.time : newActivityTime || formatTime(activityStartTime(day, index >= 0 ? index : day.activities.length));
+  const suggestedIndex = insertingActivityIndex < 0 ? day.activities.length : insertingActivityIndex;
+  $('#activityStartTime').value = index >= 0 && activity.timeLocked ? activity.time : newActivityTime || formatTime(activityStartTime(day, index >= 0 ? index : suggestedIndex));
   syncActivityTypeFields();
   setActivityTimeEnabled(activity.hasTime);
   setActivityCostEnabled(activity.hasCost);
@@ -791,7 +802,8 @@ form.addEventListener('submit', event => {
   });
   if (!activity.title) return showToast('请填写安排名称');
   const day = currentTrip().days[selectedDay];
-  const suggestedTime = hasTime ? formatTime(editingIndex >= 0 ? activityStartTime(day, editingIndex) : (newActivityTime ? timeToMinutes(newActivityTime) : activityStartTime(day, day.activities.length))) : '';
+  const suggestedIndex = insertingActivityIndex < 0 ? day.activities.length : insertingActivityIndex;
+  const suggestedTime = hasTime ? formatTime(editingIndex >= 0 ? activityStartTime(day, editingIndex) : (newActivityTime ? timeToMinutes(newActivityTime) : activityStartTime(day, suggestedIndex))) : '';
   if (hasTime) activity.timeLocked = addingActivityAlternative || startTime !== suggestedTime || Boolean(newActivityTime);
   if (addingActivityAlternative) {
     currentTrip().days[selectedDay].activities[editingIndex].alternatives.push(activity);
@@ -803,8 +815,9 @@ form.addEventListener('submit', event => {
     currentTrip().days[selectedDay].activities.splice(insertingActivityIndex < 0 ? currentTrip().days[selectedDay].activities.length : insertingActivityIndex, 0, activity);
   }
   const wasAlternative = addingActivityAlternative;
-  addingActivityAlternative = false; insertingActivityIndex = -1; newActivityTime = '';
-  persist(); dialog.close(); renderTimeline(); updateCost(); showToast(wasAlternative ? '活动备用方案已添加' : (editingIndex >= 0 ? '安排已更新，后续时间自动顺延' : '安排已添加'));
+  const wasInserted = insertingAroundActivity;
+  addingActivityAlternative = false; insertingActivityIndex = -1; insertingAroundActivity = false; newActivityTime = '';
+  persist(); dialog.close(); renderTimeline(); updateCost(); showToast(wasAlternative ? '活动备用方案已添加' : (editingIndex >= 0 ? '安排已更新，后续时间自动顺延' : (wasInserted ? '安排已插入，后续时间自动顺延' : '安排已添加')));
 });
 function xmlEscape(value) {
   return String(value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
@@ -1121,7 +1134,7 @@ $('#toggleDayZero').addEventListener('click', toggleDayZero);
 ['editTripStart', 'editTripEnd'].forEach(id => document.querySelector(`#${id}`).addEventListener('change', updateEditTripDaysHint));
 ['closeTripDialog', 'cancelTripDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => tripDialog.close()));
 ['closeEditTripDialog', 'cancelEditTripDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => editTripDialog.close()));
-['closeActivityDialog', 'cancelActivityDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => { addingActivityAlternative = false; dialog.close(); }));
+['closeActivityDialog', 'cancelActivityDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => { addingActivityAlternative = false; insertingActivityIndex = -1; insertingAroundActivity = false; newActivityTime = ''; dialog.close(); }));
 ['closePlanDialog', 'cancelPlanDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => { addingDayAlternativeIndex = -1; planDialog.close(); }));
 planForm.addEventListener('submit', event => {
   event.preventDefault();
@@ -1181,7 +1194,7 @@ editTripForm.addEventListener('submit', event => {
 state.trips = state.trips.map(normalizeTrip);
 persist();
 tripDialog.addEventListener('cancel', event => { event.preventDefault(); tripDialog.close(); });
-dialog.addEventListener('cancel', event => { event.preventDefault(); dialog.close(); });
+dialog.addEventListener('cancel', event => { event.preventDefault(); addingActivityAlternative = false; insertingActivityIndex = -1; insertingAroundActivity = false; newActivityTime = ''; dialog.close(); });
 membersDialog.addEventListener('cancel', event => { event.preventDefault(); membersDialog.close(); });
 planDialog.addEventListener('cancel', event => { event.preventDefault(); addingDayAlternativeIndex = -1; planDialog.close(); });
 editTripDialog.addEventListener('cancel', event => { event.preventDefault(); editTripDialog.close(); });
