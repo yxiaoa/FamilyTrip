@@ -119,6 +119,13 @@
         <div class="dialog-actions"><button class="button primary" type="button" id="doneCategory">完成</button></div>
       </form>
     </dialog>
+    <dialog id="printDialog" class="activity-dialog print-dialog">
+      <form method="dialog">
+        <div class="dialog-heading"><div><span class="day-label">导出设置</span><h2>打印 / 导出 PDF</h2></div><button class="close-dialog" type="button" id="closePrintDialog" aria-label="关闭">×</button></div>
+        <label class="confirm-option"><input id="printItineraryOnly" type="checkbox"> 仅打印行程安排，不打印汇总信息</label>
+        <div class="dialog-actions"><button class="button secondary" type="button" id="cancelPrintDialog">取消</button><button class="button primary" type="button" id="confirmPrint">继续打印</button></div>
+      </form>
+    </dialog>
     <div class="toast" id="toast"></div>
     <script src="app.js"></script>
   </body>

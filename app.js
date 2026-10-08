@@ -64,6 +64,7 @@ const currencyDialog = document.querySelector('#currencyDialog');
 const currencyForm = document.querySelector('#currencyForm');
 const categoryDialog = document.querySelector('#categoryDialog');
 const categoryForm = document.querySelector('#categoryForm');
+const printDialog = document.querySelector('#printDialog');
 const $ = selector => document.querySelector(selector);
 
 function persist() { localStorage.setItem(stateKey, JSON.stringify({ ...state, storageSchemaVersion: CURRENT_SCHEMA_VERSION })); }
@@ -1148,7 +1149,14 @@ function openTripFile(event) {
     .catch(error => showToast(`无法打开行程文件：${error.message}`))
     .finally(() => { event.target.value = ''; });
 }
-document.querySelector('#printPdf').addEventListener('click', () => window.print());
+document.querySelector('#printPdf').addEventListener('click', () => printDialog.showModal());
+['closePrintDialog', 'cancelPrintDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => printDialog.close()));
+document.querySelector('#confirmPrint').addEventListener('click', () => {
+  document.body.classList.toggle('print-itinerary-only', document.querySelector('#printItineraryOnly').checked);
+  printDialog.close();
+  window.print();
+});
+window.addEventListener('afterprint', () => document.body.classList.remove('print-itinerary-only'));
 document.querySelector('#exportExcel').addEventListener('click', exportExcel);
 document.querySelector('#saveTripFile').addEventListener('click', saveTripFile);
 document.querySelector('#openTripFile').addEventListener('click', () => {
