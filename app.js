@@ -208,8 +208,8 @@ function normalizeMember(member, index) {
 }
 function normalizeActivity(activity, currencies = supportedCurrencies) {
   const alternatives = Array.isArray(activity.alternatives) ? activity.alternatives.map(item => normalizeActivity({ ...item, alternatives: [] }, currencies)) : [];
-  const type = ['accommodation', 'transport', 'purchase'].includes(activity.type) ? activity.type : 'activity';
-  const hasTime = typeof activity.hasTime === 'boolean' ? activity.hasTime : !isUntimedActivity({ type });
+  const type = ['accommodation', 'transport', 'purchase', 'waiting'].includes(activity.type) ? activity.type : 'activity';
+  const hasTime = type === 'waiting' || (typeof activity.hasTime === 'boolean' ? activity.hasTime : !isUntimedActivity({ type }));
   const hasCost = typeof activity.hasCost === 'boolean' ? activity.hasCost : true;
   const normalized = { ...activity, type, fromLocation: String(activity.fromLocation || ''), toLocation: String(activity.toLocation || ''), hasTime, hasCost, completed: activity.completed === true, alternatives };
   if (hasTime) {
@@ -572,6 +572,7 @@ function renderTimeline() {
       const isAccommodation = activity.type === 'accommodation';
       const isTransport = activity.type === 'transport';
       const isPurchase = activity.type === 'purchase';
+      const isWaiting = activity.type === 'waiting';
       const gap = activity.hasTime ? gapHtml(dayIndex, index, previousEnd, start) : '';
       if (activity.hasTime) previousEnd = start + Number(activity.duration);
       const alternativeButtons = activity.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-action="select-activity-alternative" data-alternative-index="${alternativeIndex}">备选：${escapeHtml(alternative.title)}</button>`).join('');
@@ -579,6 +580,14 @@ function renderTimeline() {
       const timeHtml = isAccommodation ? '<span class="accommodation-time-label">住宿</span>' : activity.hasTime ? `<span>${formatTime(start)}</span><small>${activity.duration}分钟</small>` : '<span>未记录时间</span>';
       const conflictHtml = conflicts.length ? `<div class="time-overlap-warning" role="status">⚠ 时间重叠：${conflicts.map(conflict => `与「${escapeHtml(conflict.title)}」重叠 ${conflict.minutes} 分钟`).join('；')}</div>` : '';
       const movementActions = isAccommodation ? '' : '<button data-action="up">上移</button><button data-action="down">下移</button><button data-action="insert-before">在之前插入行程</button><button data-action="insert-after">在之后插入行程</button>';
+      if (isWaiting) {
+        return `${gap}<div class="activity activity-waiting" data-day="${dayIndex}" data-index="${index}">
+          <div class="time"></div><span class="activity-dot"></span><div class="activity-card is-waiting" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="拖动等待安排：${escapeHtml(activity.title)} ${activity.duration}分钟">
+            <span class="waiting-summary">${escapeHtml(activity.title)} ${activity.duration}分钟</span>
+            <details class="activity-menu"><summary aria-label="更多操作" title="更多操作">⋮</summary><div class="activity-menu-items"><button data-action="toggle-complete" aria-pressed="${activity.completed}">${activity.completed ? '取消完成' : '标记完成'}</button>${movementActions}<button data-action="edit">编辑</button><button data-action="add-alternative">添加备用安排</button><button data-action="delete">删除</button></div></details>
+          </div>
+        </div>`;
+      }
       return `${gap}<div class="activity${!activity.hasTime ? ' activity-untimed' : ''}${isAccommodation ? ' activity-accommodation' : ''}${isTransport ? ' activity-transport' : ''}${isPurchase ? ' activity-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
         <div class="activity-card${activity.completed ? ' is-complete' : ''}${!activity.hasTime ? ' is-untimed' : ''}${isAccommodation ? ' is-accommodation' : ''}${isTransport ? ' is-transport' : ''}${isPurchase ? ' is-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="${isAccommodation ? '住宿安排，可拖动到其他天：' : '拖动安排：'}${escapeHtml(activity.title)}"><div class="activity-main"><div><h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
           ${activity.hasCost ? `<div class="activity-meta"><strong>${escapeHtml(activity.category)} ${formatCurrency(activityTotalForTrip(activity, trip), activity.currency)}</strong></div>` : ''}
@@ -851,9 +860,16 @@ document.addEventListener('wheel', event => {
 $('#activityType').addEventListener('change', event => {
   const defaultCategory = { accommodation: '住宿费', transport: '交通费', purchase: '旅行物品' }[event.target.value];
   if (defaultCategory) renderCategoryOptions(defaultCategory);
+  if (event.target.value === 'waiting') {
+    setActivityTimeEnabled(true);
+    if (!$('#activityName').value.trim()) $('#activityName').value = '候车';
+  }
   syncActivityTypeFields();
 });
-$('#toggleActivityTime').addEventListener('click', () => setActivityTimeEnabled(!$('#toggleActivityTime').classList.contains('is-active')));
+$('#toggleActivityTime').addEventListener('click', () => {
+  if ($('#activityType').value === 'waiting') return showToast('等待安排需要记录持续时间');
+  setActivityTimeEnabled(!$('#toggleActivityTime').classList.contains('is-active'));
+});
 $('#toggleActivityCost').addEventListener('click', () => setActivityCostEnabled(!$('#toggleActivityCost').classList.contains('is-active')));
 $('#costModeSwitch').addEventListener('click', event => {
   const button = event.target.closest('[data-cost-mode]');

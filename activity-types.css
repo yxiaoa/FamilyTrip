@@ -58,6 +58,50 @@
   border-color: #c39a46;
 }
 
+.activity.activity-waiting {
+  padding: 1px 0;
+}
+
+.activity-waiting .activity-dot {
+  visibility: hidden;
+}
+
+.activity-card.is-waiting {
+  display: block;
+  min-height: 0;
+  padding: 1px 25px 1px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: grab;
+}
+
+.activity-card.is-waiting:hover {
+  border: 0;
+  background: transparent;
+}
+
+.waiting-summary {
+  display: block;
+  overflow: hidden;
+  color: #99939b;
+  font-size: 10px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-waiting .activity-menu {
+  top: -2px;
+  right: 0;
+}
+
+.activity-waiting .activity-menu summary {
+  width: 18px;
+  height: 18px;
+  font-size: 14px;
+}
+
 .activity-route {
   display: flex;
   align-items: center;
