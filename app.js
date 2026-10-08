@@ -171,7 +171,7 @@ function normalizeTrip(trip) {
   const displayCurrency = currencies.includes(trip.displayCurrency) ? trip.displayCurrency : 'CNY';
   const todos = Array.isArray(trip.todos) ? trip.todos.map((todo, index) => normalizeTodo(todo, index)) : defaultTodos();
   const customCategories = [...new Set((Array.isArray(trip.customCategories) ? trip.customCategories : []).map(category => String(category).trim()).filter(category => category && !builtInCategories.includes(category)))].slice(0, 30);
-  return { ...trip, members: familyMembers.length, familyMembers, customCurrencies, exchangeRates, displayCurrency, todos, customCategories, days: days.map((day, index) => ({ ...day, isDayZero: index === 0 && day.isDayZero === true, title: index === 0 && day.isDayZero ? '行前准备' : day.title, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: keepAccommodationLast(Array.isArray(day.activities) ? day.activities.map(activity => normalizeActivity(activity, currencies)) : []), alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(alternative => normalizeDayAlternative(alternative, currencies)) : [] })) };
+  return { ...trip, members: familyMembers.length, familyMembers, customCurrencies, exchangeRates, displayCurrency, todos, customCategories, days: days.map((day, index) => ({ ...day, isDayZero: index === 0 && day.isDayZero === true, isTitleCustom: day.isTitleCustom === true, title: day.title || (day.isDayZero ? '行前准备' : `第 ${index + 1} 天`), startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: keepAccommodationLast(Array.isArray(day.activities) ? day.activities.map(activity => normalizeActivity(activity, currencies)) : []), alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(alternative => normalizeDayAlternative(alternative, currencies)) : [] })) };
 }
 function normalizeCustomCurrencies(customCurrencies) {
   const usedCodes = new Set(supportedCurrencies);
@@ -600,11 +600,46 @@ function renderTimeline() {
     const dayNumber = day.isDayZero ? 0 : dayIndex + 1 - (hasDayZero ? 1 : 0);
     const dayAlternatives = day.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-day="${dayIndex}" data-alternative-index="${alternativeIndex}" data-action="select-day-alternative">备用：${escapeHtml(alternative.name)}</button>`).join('');
     return `<section class="day-column" data-day="${dayIndex}">
-      <div class="day-column-header"><div><span class="day-label">DAY ${dayNumber}</span><h3>${escapeHtml(day.title)}</h3><small>${formatDate(date)}</small></div><div class="day-plan-actions"><label class="day-start">开始 <input data-day-start="${dayIndex}" type="time" value="${day.startTime}"></label><button class="plan-button" data-day="${dayIndex}" data-action="add-day-alternative">＋ 备用整日</button>${dayAlternatives}</div></div>
+      <div class="day-column-header"><div class="day-heading"><span class="day-label">DAY ${dayNumber}</span><div class="day-heading-line"><h3>${escapeHtml(day.title)}</h3><button class="day-title-edit" type="button" data-edit-day-title="${dayIndex}" aria-label="修改 DAY ${dayNumber} 标题" title="修改标题">✎</button></div><div class="day-title-editor" data-day-title-editor="${dayIndex}" hidden><input type="text" maxlength="60" aria-label="每日标题"><button type="button" data-save-day-title="${dayIndex}">保存</button><button type="button" data-cancel-day-title="${dayIndex}">取消</button></div><small>${formatDate(date)}</small></div><div class="day-plan-actions"><label class="day-start">开始 <input data-day-start="${dayIndex}" type="time" value="${day.startTime}"></label><button class="plan-button" data-day="${dayIndex}" data-action="add-day-alternative">＋ 备用整日</button>${dayAlternatives}</div></div>
       <div class="timeline">${activityHtml}<button class="day-add-button" data-action="add-day-activity" data-day="${dayIndex}">＋ 添加安排</button></div>
     </section>`;
   }).join('');
   updateTripProgress();
+  daysBoard.querySelectorAll('[data-edit-day-title]').forEach(button => button.addEventListener('click', () => {
+    const dayIndex = Number(button.dataset.editDayTitle);
+    const editor = daysBoard.querySelector(`[data-day-title-editor="${dayIndex}"]`);
+    const input = editor.querySelector('input');
+    input.value = trip.days[dayIndex].title;
+    button.hidden = true;
+    button.previousElementSibling.hidden = true;
+    editor.hidden = false;
+    input.focus();
+    input.select();
+  }));
+  daysBoard.querySelectorAll('[data-save-day-title]').forEach(button => button.addEventListener('click', () => {
+    const dayIndex = Number(button.dataset.saveDayTitle);
+    const input = daysBoard.querySelector(`[data-day-title-editor="${dayIndex}"] input`);
+    const title = input.value.trim();
+    if (!title) {
+      showToast('每日标题不能为空');
+      input.focus();
+      return;
+    }
+    trip.days[dayIndex].title = title;
+    trip.days[dayIndex].isTitleCustom = true;
+    persist();
+    renderTimeline();
+    showToast('每日标题已更新');
+  }));
+  daysBoard.querySelectorAll('[data-cancel-day-title]').forEach(button => button.addEventListener('click', () => renderTimeline()));
+  daysBoard.querySelectorAll('[data-day-title-editor] input').forEach(input => input.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      input.closest('.day-title-editor').querySelector('[data-save-day-title]').click();
+    } else if (event.key === 'Escape') {
+      renderTimeline();
+    }
+  }));
   daysBoard.querySelectorAll('.activity-card, .day-plan-actions [data-action], .schedule-gap [data-action], .day-add-button').forEach(card => card.addEventListener('click', event => {
     const actionElement = event.target.closest('[data-action]');
     const action = actionElement?.dataset.action;
@@ -1296,8 +1331,8 @@ editTripForm.addEventListener('submit', event => {
   trip.endDate = endDate;
   trip.days = [...preparationDays, ...Array.from({ length: range.days }, (_, index) => previousDays[index] || ({ title: index === 0 ? `抵达 · ${trip.destination}` : `第 ${index + 1} 天`, startTime: '09:00', activities: [], alternatives: [] }))];
   trip.days.forEach((day, index) => {
-    if (day.isDayZero) day.title = '行前准备';
-    else if (!day.title || /^第 \d+ 天$/.test(day.title)) {
+    if (day.isDayZero && !day.isTitleCustom && !day.title) day.title = '行前准备';
+    else if (!day.isTitleCustom && (!day.title || /^第 \d+ 天$/.test(day.title))) {
       const dayNumber = index - (hasDayZero ? 1 : 0);
       day.title = dayNumber === 0 ? `抵达 · ${trip.destination}` : `第 ${dayNumber + 1} 天`;
     }
