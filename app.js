@@ -50,6 +50,8 @@ let addingDayAlternativeIndex = -1;
 let insertingActivityIndex = -1;
 let insertingAroundActivity = false;
 let newActivityTime = '';
+let newActivityDuration = 0;
+let selectedExampleTrip = null;
 const daysBoard = document.querySelector('#daysBoard');
 const toast = document.querySelector('#toast');
 const dialog = document.querySelector('#activityDialog');
@@ -162,6 +164,18 @@ function defaultFamilyMembers(count) {
   }));
 }
 function currentTrip() { return state.trips.find(trip => trip.id === state.activeTripId) || state.trips[0]; }
+function activateNewTripExample(fileData) {
+  const { trip } = migrateTripFile(fileData);
+  selectedExampleTrip = trip;
+  const startDate = new Date();
+  const localIso = date => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  $('#newTripName').value = trip.name || '';
+  $('#newTripDestination').value = trip.destination || '';
+  $('#newTripMembers').value = trip.members;
+  $('#newTripStart').value = localIso(startDate);
+  $('#newTripEnd').value = localIso(new Date(startDate.getTime() + (trip.days.length - 1) * 86400000));
+  $('#newTripExampleHint').textContent = `已载入「${trip.name || trip.destination}」，包含 ${trip.days.length} 天游程；创建后可继续编辑每项安排。`;
+}
 function normalizeTrip(trip) {
   const days = Array.isArray(trip.days) && trip.days.length ? trip.days : [{ title: '第一天', startTime: '09:00', activities: [] }];
   const members = Number(trip.members) || 1;
@@ -536,7 +550,7 @@ function activityTimeConflicts(day) {
 function gapHtml(dayIndex, insertIndex, start, end) {
   const duration = end - start;
   if (duration < 10) return '';
-  return `<div class="schedule-gap"><span>无行程 · ${Math.floor(duration / 60)}小时${duration % 60 ? `${duration % 60}分钟` : ''}</span><button class="gap-add" data-action="insert-activity" data-day="${dayIndex}" data-insert-index="${insertIndex}" data-insert-time="${formatTime(start)}">＋ 插入安排</button></div>`;
+  return `<div class="schedule-gap"><span>无行程 · ${Math.floor(duration / 60)}小时${duration % 60 ? `${duration % 60}分钟` : ''}</span><button class="gap-add" data-action="insert-activity" data-day="${dayIndex}" data-insert-index="${insertIndex}" data-insert-time="${formatTime(start)}" data-insert-duration="${Math.min(duration, 720)}">＋ 插入安排</button></div>`;
 }
 function updateTripProgress() {
   const trip = currentTrip();
@@ -587,7 +601,7 @@ function renderTimeline() {
       if (activity.hasTime) previousEnd = start + Number(activity.duration);
       const alternativeButtons = activity.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-action="select-activity-alternative" data-alternative-index="${alternativeIndex}">备选：${escapeHtml(alternative.title)}</button>`).join('');
       const routeHtml = isTransport ? `<div class="activity-route"><span>${escapeHtml(activity.fromLocation || '出发地点')}</span><b aria-label="前往">→</b><span>${escapeHtml(activity.toLocation || '到达地点')}</span></div>` : '';
-      const timeHtml = isAccommodation ? '<span class="accommodation-time-label">住宿</span>' : activity.hasTime ? `<span>${formatTime(start)}</span><small>${activity.duration}分钟</small>` : '<span>未记录时间</span>';
+      const timeHtml = isAccommodation ? '<span class="accommodation-time-label">住宿</span>' : activity.hasTime ? `<span>${formatTime(start)}</span><small>${activity.duration}分钟</small>` : '';
       const conflictHtml = conflicts.length ? `<div class="time-overlap-warning" role="status">⚠ 时间重叠：${conflicts.map(conflict => `与「${escapeHtml(conflict.title)}」重叠 ${conflict.minutes} 分钟`).join('；')}</div>` : '';
       const movementActions = isAccommodation ? '' : '<button data-action="up">上移</button><button data-action="down">下移</button><button data-action="insert-before">在之前插入行程</button><button data-action="insert-after">在之后插入行程</button>';
       if (isWaiting) {
@@ -663,16 +677,17 @@ function renderTimeline() {
       persist(); renderTimeline(); return;
     }
     if (action === 'add-day-activity') {
-      selectedDay = dayIndex; insertingActivityIndex = activities.length; insertingAroundActivity = false; newActivityTime = ''; openEditor(); return;
+      selectedDay = dayIndex; insertingActivityIndex = activities.length; insertingAroundActivity = false; newActivityTime = ''; newActivityDuration = 0; openEditor(); return;
     }
     if (action === 'insert-activity') {
-      selectedDay = dayIndex; insertingActivityIndex = Number(actionElement.dataset.insertIndex); insertingAroundActivity = false; newActivityTime = actionElement.dataset.insertTime; openEditor(); return;
+      selectedDay = dayIndex; insertingActivityIndex = Number(actionElement.dataset.insertIndex); insertingAroundActivity = false; newActivityTime = actionElement.dataset.insertTime; newActivityDuration = Number(actionElement.dataset.insertDuration); openEditor(); return;
     }
     if (action === 'insert-before' || action === 'insert-after') {
       selectedDay = dayIndex;
       insertingActivityIndex = index + (action === 'insert-after' ? 1 : 0);
       insertingAroundActivity = true;
       newActivityTime = '';
+      newActivityDuration = 0;
       addingActivityAlternative = false;
       openEditor();
       return;
@@ -867,7 +882,7 @@ function openEditor(index = -1) {
   $('#activityType').value = activity.type || 'activity';
   $('#transportFrom').value = activity.fromLocation || '';
   $('#transportTo').value = activity.toLocation || '';
-  renderCategoryOptions(activity.category || '其他'); renderCurrencyOptions(); $('#activityCost').value = activity.cost; $('#activityCurrency').value = activity.currency || 'CNY'; setActivityCostMode(activity.costMode || 'total'); $('#activityDuration').value = activity.duration;
+  renderCategoryOptions(activity.category || '其他'); renderCurrencyOptions(); $('#activityCost').value = activity.cost; $('#activityCurrency').value = activity.currency || 'CNY'; setActivityCostMode(activity.costMode || 'total'); $('#activityDuration').value = index < 0 && newActivityDuration >= 10 ? newActivityDuration : activity.duration;
   const day = currentTrip().days[selectedDay];
   const suggestedIndex = insertingActivityIndex < 0 ? day.activities.length : insertingActivityIndex;
   $('#activityStartTime').value = index >= 0 && activity.timeLocked ? activity.time : newActivityTime || formatTime(activityStartTime(day, index >= 0 ? index : suggestedIndex));
@@ -956,7 +971,7 @@ form.addEventListener('submit', event => {
   keepAccommodationLast(currentTrip().days[selectedDay].activities);
   const wasAlternative = addingActivityAlternative;
   const wasInserted = insertingAroundActivity;
-  addingActivityAlternative = false; insertingActivityIndex = -1; insertingAroundActivity = false; newActivityTime = '';
+  addingActivityAlternative = false; insertingActivityIndex = -1; insertingAroundActivity = false; newActivityTime = ''; newActivityDuration = 0;
   persist(); dialog.close(); renderTimeline(); updateCost(); showToast(wasAlternative ? '活动备用方案已添加' : (editingIndex >= 0 ? '安排已更新，后续时间自动顺延' : (wasInserted ? '安排已插入，后续时间自动顺延' : '安排已添加')));
 });
 function xmlEscape(value) {
@@ -1232,11 +1247,77 @@ membersForm.addEventListener('submit', event => {
 });
 document.querySelector('#newTripButton').addEventListener('click', () => {
   const today = new Date();
-  const iso = date => date.toISOString().slice(0, 10);
+  const iso = date => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  selectedExampleTrip = null;
+  $('#newTripExample').value = '';
+  $('#newTripExampleHint').textContent = '选择示例后，可以继续修改行程名称、目的地、日期和同行人数。';
+  $('#newTripName').value = '';
+  $('#newTripDestination').value = '';
   $('#newTripStart').value = iso(today);
   $('#newTripEnd').value = iso(new Date(today.getTime() + 4 * 86400000));
   $('#newTripMembers').value = currentTrip().members;
   tripDialog.showModal(); $('#newTripName').focus();
+});
+$('#newTripExample').addEventListener('change', async event => {
+  const path = event.target.value;
+  selectedExampleTrip = null;
+  if (!path) {
+    $('#newTripExampleHint').textContent = '选择示例后，可以继续修改行程名称、目的地、日期和同行人数。';
+    $('#newTripName').value = '';
+    $('#newTripDestination').value = '';
+    return;
+  }
+
+  if (window.location.protocol === 'file:') {
+    const exampleFileInput = $('#newTripExampleFile');
+    exampleFileInput.dataset.examplePath = path;
+    exampleFileInput.value = '';
+    $('#newTripExample').value = '';
+    $('#newTripExampleHint').textContent = `本地打开时，请在文件选择器中选择 ${path.split('/').pop()}。`;
+    exampleFileInput.click();
+    return;
+  }
+
+  const submitButton = tripForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  $('#newTripExampleHint').textContent = '正在载入示例…';
+  try {
+    const response = await fetch(path);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const fileData = await response.json();
+    if ($('#newTripExample').value !== path) return;
+    activateNewTripExample(fileData);
+  } catch (error) {
+    if ($('#newTripExample').value !== path) return;
+    $('#newTripExample').value = '';
+    $('#newTripExampleHint').textContent = '示例载入失败。请确认通过网站或本地 HTTP 服务器打开应用后重试。';
+    console.error(`无法载入行程示例 ${path}`, error);
+    showToast('示例载入失败，请通过网站或本地 HTTP 服务器打开应用');
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+$('#newTripExampleFile').addEventListener('change', async event => {
+  const input = event.target;
+  const file = input.files?.[0];
+  const path = input.dataset.examplePath;
+  input.value = '';
+  if (!file || !path) return;
+  if (file.name !== path.split('/').pop()) {
+    $('#newTripExampleHint').textContent = `请选择 ${path.split('/').pop()}，或重新选择示例。`;
+    showToast(`请选择对应的示例文件 ${path.split('/').pop()}`);
+    return;
+  }
+  try {
+    const fileData = JSON.parse(await file.text());
+    $('#newTripExample').value = path;
+    activateNewTripExample(fileData);
+  } catch (error) {
+    $('#newTripExample').value = '';
+    $('#newTripExampleHint').textContent = '示例载入失败，请确认 JSON 文件格式正确后重试。';
+    console.error(`无法载入行程示例 ${path}`, error);
+    showToast('示例载入失败，请确认 JSON 文件格式正确');
+  }
 });
 $('#displayCurrency').addEventListener('change', event => {
   currentTrip().displayCurrency = event.target.value;
@@ -1303,7 +1384,7 @@ $('#toggleDayZero').addEventListener('click', toggleDayZero);
 ['editTripStart', 'editTripEnd'].forEach(id => document.querySelector(`#${id}`).addEventListener('change', updateEditTripDaysHint));
 ['closeTripDialog', 'cancelTripDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => tripDialog.close()));
 ['closeEditTripDialog', 'cancelEditTripDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => editTripDialog.close()));
-['closeActivityDialog', 'cancelActivityDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => { addingActivityAlternative = false; insertingActivityIndex = -1; insertingAroundActivity = false; newActivityTime = ''; dialog.close(); }));
+['closeActivityDialog', 'cancelActivityDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => { addingActivityAlternative = false; insertingActivityIndex = -1; insertingAroundActivity = false; newActivityTime = ''; newActivityDuration = 0; dialog.close(); }));
 ['closePlanDialog', 'cancelPlanDialog'].forEach(id => document.querySelector(`#${id}`).addEventListener('click', () => { addingDayAlternativeIndex = -1; planDialog.close(); }));
 planForm.addEventListener('submit', event => {
   event.preventDefault();
@@ -1325,8 +1406,24 @@ tripForm.addEventListener('submit', event => {
   if (!destination || !startDate || !endDate || !Number.isInteger(members) || members < 1 || members > 30) return showToast('请填写目的地、日期和同行人数');
   const range = dateRange(startDate, endDate);
   if (range.days < 1 || range.days > 31) return showToast('旅行时长需为 1 到 31 天');
-  const days = Array.from({ length: range.days }, (_, index) => ({ title: index === 0 ? `抵达 · ${destination}` : `第 ${index + 1} 天`, startTime: '09:00', activities: [] }));
-  const trip = normalizeTrip({ id: `trip-${Date.now()}`, name, destination, startDate, endDate, members, days });
+  if ($('#newTripExample').value && !selectedExampleTrip) return showToast('请等待示例载入完成后再创建行程');
+  const days = Array.from({ length: range.days }, (_, index) => {
+    const templateDay = selectedExampleTrip?.days[index];
+    return templateDay
+      ? JSON.parse(JSON.stringify(templateDay))
+      : { title: index === 0 ? `抵达 · ${destination}` : `第 ${index + 1} 天`, startTime: '09:00', activities: [], alternatives: [] };
+  });
+  const trip = normalizeTrip({
+    ...(selectedExampleTrip || {}),
+    id: `trip-${Date.now()}`,
+    name,
+    destination,
+    startDate,
+    endDate,
+    members,
+    familyMembers: defaultFamilyMembers(members),
+    days
+  });
   state.trips.push(trip); state.activeTripId = trip.id; selectedDay = 0; persist(); tripDialog.close(); renderApp(); showToast('新行程已创建');
 });
 editTripForm.addEventListener('submit', event => {
@@ -1363,7 +1460,7 @@ editTripForm.addEventListener('submit', event => {
 state.trips = state.trips.map(normalizeTrip);
 persist();
 tripDialog.addEventListener('cancel', event => { event.preventDefault(); tripDialog.close(); });
-dialog.addEventListener('cancel', event => { event.preventDefault(); addingActivityAlternative = false; insertingActivityIndex = -1; insertingAroundActivity = false; newActivityTime = ''; dialog.close(); });
+dialog.addEventListener('cancel', event => { event.preventDefault(); addingActivityAlternative = false; insertingActivityIndex = -1; insertingAroundActivity = false; newActivityTime = ''; newActivityDuration = 0; dialog.close(); });
 membersDialog.addEventListener('cancel', event => { event.preventDefault(); membersDialog.close(); });
 planDialog.addEventListener('cancel', event => { event.preventDefault(); addingDayAlternativeIndex = -1; planDialog.close(); });
 editTripDialog.addEventListener('cancel', event => { event.preventDefault(); editTripDialog.close(); });

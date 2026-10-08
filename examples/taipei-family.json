@@ -1,0 +1,54 @@
+{
+  "format": "FamilyTrip",
+  "schemaVersion": 10,
+  "trip": {
+    "name": "台北美食与城市漫步",
+    "destination": "中国台湾台北",
+    "startDate": "2026-10-08",
+    "endDate": "2026-10-11",
+    "members": 4,
+    "days": [
+      {
+        "title": "抵达台北 · 夜市初体验",
+        "startTime": "10:00",
+        "activities": [
+          { "time": "10:00", "title": "抵达桃园机场", "detail": "入境、领取行李与悠游卡", "cost": 0, "duration": 90, "category": "其他" },
+          { "time": "12:00", "title": "机场捷运进市区", "detail": "直达台北车站 · 约 40分钟", "cost": 600, "duration": 45, "category": "交通费", "type": "transport", "fromLocation": "桃园机场", "toLocation": "台北车站" },
+          { "time": "13:00", "title": "入住 · 台北车站周边", "detail": "家庭房 · 行李寄存", "cost": 5200, "duration": 30, "category": "住宿费", "type": "accommodation" },
+          { "time": "17:30", "title": "宁夏夜市晚餐", "detail": "蚵仔煎、芋头球 · 按需点餐", "cost": 1600, "duration": 100, "category": "餐饮费" }
+        ]
+      },
+      {
+        "title": "台北经典 · 城市与自然",
+        "startTime": "09:00",
+        "activities": [
+          { "time": "09:00", "title": "中正纪念堂", "detail": "广场漫步 · 留意整点仪队时间", "cost": 0, "duration": 75, "category": "其他" },
+          { "time": "11:00", "title": "午餐 · 永康街", "detail": "牛肉面与小吃 · 亲子友善选择多", "cost": 1800, "duration": 75, "category": "餐饮费" },
+          { "time": "13:00", "title": "台北 101 观景台", "detail": "建议提前预约门票", "cost": 2400, "duration": 100, "category": "门票" },
+          { "time": "15:30", "title": "象山亲山步道入口", "detail": "按体力选择步道长度", "cost": 0, "duration": 90, "category": "其他" },
+          { "time": "18:00", "title": "信义商圈晚餐", "detail": "百货美食街或预约餐厅", "cost": 2200, "duration": 90, "category": "餐饮费" }
+        ]
+      },
+      {
+        "title": "九份山城 · 平溪放天灯",
+        "startTime": "08:30",
+        "activities": [
+          { "time": "08:30", "title": "包车前往十分", "detail": "建议预约往返车辆", "cost": 3200, "duration": 60, "category": "交通费" },
+          { "time": "10:00", "title": "十分老街与瀑布", "detail": "天灯体验 · 注意火车通行", "cost": 1000, "duration": 120, "category": "门票" },
+          { "time": "12:30", "title": "午餐 · 平溪线小吃", "detail": "老街用餐 · 预留休息时间", "cost": 1600, "duration": 60, "category": "餐饮费" },
+          { "time": "14:00", "title": "九份老街", "detail": "山城巷弄与茶馆 · 备好雨具", "cost": 800, "duration": 150, "category": "餐饮费" },
+          { "time": "17:00", "title": "返回台北", "detail": "预留山区交通时间", "cost": 0, "duration": 75, "category": "交通费" }
+        ]
+      },
+      {
+        "title": "收尾漫游 · 返程",
+        "startTime": "09:00",
+        "activities": [
+          { "time": "09:00", "title": "早餐与退房", "detail": "确认证件、行李与房间物品", "cost": 500, "duration": 60, "category": "餐饮费" },
+          { "time": "10:30", "title": "迪化街与大稻埕", "detail": "老街散步 · 采购茶叶伴手礼", "cost": 1800, "duration": 100, "category": "旅行物品" },
+          { "time": "13:00", "title": "前往机场", "detail": "台北车站搭机场捷运", "cost": 600, "duration": 50, "category": "交通费" }
+        ]
+      }
+    ]
+  }
+}

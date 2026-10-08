@@ -59,7 +59,7 @@
         <label>安排名称<input id="activityName" required maxlength="40" placeholder="例如：参观二条城"></label>
         <label>详细说明<input id="activityDetail" maxlength="80" placeholder="地点、交通或备注"></label>
         <div class="activity-option-toggles" role="group" aria-label="安排记录选项"><button class="form-toggle is-active" id="toggleActivityTime" type="button" aria-pressed="true">记录时间</button><button class="form-toggle is-active" id="toggleActivityCost" type="button" aria-pressed="true">记录花费</button></div>
-        <div class="form-grid time-fields" id="activityTimeFields"><label>开始时间<input id="activityStartTime" type="time" required></label><label>结束时间<input id="activityEndTime" type="time" required></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="5" value="60"></label></div>
+        <div class="form-grid time-fields" id="activityTimeFields"><label>开始时间<input id="activityStartTime" type="time" required></label><label>结束时间<input id="activityEndTime" type="time" required></label><label>时长（分钟）<input id="activityDuration" type="number" min="10" max="720" step="1" value="60"></label></div>
         <div class="form-grid location-fields" id="transportLocationFields" hidden><label>出发地点<input id="transportFrom" maxlength="60" placeholder="例如：关西机场"></label><label>到达地点<input id="transportTo" maxlength="60" placeholder="例如：京都站"></label></div>
         <div class="form-grid" id="activityCostFields"><label>费用类别<select id="activityCategory"></select><button class="inline-link" type="button" id="manageCategories">管理类别</button></label><div class="cost-field"><label for="activityCost">费用金额</label><div class="cost-entry"><div class="cost-mode-switch" id="costModeSwitch" role="group" aria-label="计费方式"><button type="button" class="active" data-cost-mode="total" aria-pressed="true">总费用</button><button type="button" data-cost-mode="perPerson" aria-pressed="false">人均</button></div><input id="activityCost" type="number" min="0" step="0.01" value="0" aria-label="费用金额"></div><input id="activityCostMode" type="hidden" value="total"></div><label>费用币种<select id="activityCurrency"></select></label></div>
         <div class="dialog-actions"><button class="button secondary" type="button" id="cancelActivityDialog">取消</button><button class="button primary" id="saveActivity" value="default">保存安排</button></div>
@@ -95,9 +95,12 @@
     <dialog id="tripDialog" class="activity-dialog trip-dialog">
       <form method="dialog" id="tripForm">
         <div class="dialog-heading"><div><span class="day-label">新建旅行</span><h2>创建一份新的行程计划</h2></div><button class="close-dialog" type="button" id="closeTripDialog" aria-label="关闭">×</button></div>
+        <label>从示例开始<select id="newTripExample"><option value="">空白行程</option><option value="examples/kyoto-family.json">京都亲子慢游 · 5天</option><option value="examples/taipei-family.json">台北美食与城市漫步 · 4天</option><option value="examples/hokkaido-family.json">北海道自然体验 · 4天</option></select></label>
+        <p class="dialog-help" id="newTripExampleHint">选择示例后，可以继续修改行程名称、目的地、日期和同行人数。</p>
         <label>旅行名称（可选）<input id="newTripName" maxlength="50" placeholder="例如：古镇游"></label>
         <label>目的地<input id="newTripDestination" required maxlength="30" placeholder="例如：日本东京"></label>
         <div class="form-grid"><label>开始日期<input id="newTripStart" type="date" required></label><label>结束日期<input id="newTripEnd" type="date" required></label><label>同行人数<input id="newTripMembers" type="number" min="1" max="30" value="4" required></label></div>
+        <input id="newTripExampleFile" type="file" accept=".json,application/json" hidden>
         <div class="dialog-actions"><button class="button secondary" type="button" id="cancelTripDialog">取消</button><button class="button primary" type="submit">创建行程</button></div>
       </form>
     </dialog>

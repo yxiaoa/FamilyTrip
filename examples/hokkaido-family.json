@@ -1,0 +1,55 @@
+{
+  "format": "FamilyTrip",
+  "schemaVersion": 10,
+  "trip": {
+    "name": "北海道自然体验 · 家庭行",
+    "destination": "日本北海道",
+    "startDate": "2026-12-18",
+    "endDate": "2026-12-21",
+    "members": 4,
+    "days": [
+      {
+        "title": "抵达札幌 · 冬日初见",
+        "startTime": "10:00",
+        "activities": [
+          { "time": "10:00", "title": "抵达新千岁机场", "detail": "取行李、购买交通票与暖宝宝", "cost": 800, "duration": 90, "category": "其他" },
+          { "time": "12:00", "title": "JR 前往札幌", "detail": "快速机场号 · 约 40分钟", "cost": 2400, "duration": 45, "category": "交通费", "type": "transport", "fromLocation": "新千岁机场", "toLocation": "札幌站" },
+          { "time": "13:00", "title": "入住 · 札幌站附近", "detail": "选择交通方便、有暖气的家庭房", "cost": 6800, "duration": 30, "category": "住宿费", "type": "accommodation" },
+          { "time": "16:00", "title": "大通公园与札幌电视塔", "detail": "视天气调整户外停留时间", "cost": 1200, "duration": 90, "category": "门票" },
+          { "time": "18:00", "title": "晚餐 · 札幌汤咖喱", "detail": "可选儿童辣度", "cost": 2200, "duration": 75, "category": "餐饮费" }
+        ]
+      },
+      {
+        "title": "小樽运河 · 玻璃工艺",
+        "startTime": "09:00",
+        "activities": [
+          { "time": "09:00", "title": "JR 前往小樽", "detail": "海岸线景观 · 约 45分钟", "cost": 1800, "duration": 50, "category": "交通费" },
+          { "time": "10:30", "title": "小樽运河散步", "detail": "注意结冰路面 · 穿防滑鞋", "cost": 0, "duration": 60, "category": "其他" },
+          { "time": "12:00", "title": "午餐 · 小樽寿司街", "detail": "提前确认儿童餐选择", "cost": 3200, "duration": 75, "category": "餐饮费" },
+          { "time": "13:30", "title": "北一硝子与音乐盒堂", "detail": "室内参观与伴手礼", "cost": 1800, "duration": 90, "category": "旅行物品" },
+          { "time": "16:00", "title": "返回札幌", "detail": "预留冬季列车延误时间", "cost": 1800, "duration": 50, "category": "交通费" }
+        ]
+      },
+      {
+        "title": "白色恋人 · 定山溪温泉",
+        "startTime": "09:00",
+        "activities": [
+          { "time": "09:00", "title": "白色恋人公园", "detail": "巧克力工厂参观 · 建议预约", "cost": 2400, "duration": 120, "category": "门票" },
+          { "time": "11:30", "title": "午餐 · 札幌站周边", "detail": "用餐后整理温泉住宿行李", "cost": 2000, "duration": 60, "category": "餐饮费" },
+          { "time": "13:00", "title": "巴士前往定山溪", "detail": "冬季路况可能影响车程", "cost": 2400, "duration": 75, "category": "交通费" },
+          { "time": "15:00", "title": "入住温泉旅馆", "detail": "确认儿童入浴规则与晚餐时间", "cost": 12000, "duration": 30, "category": "住宿费", "type": "accommodation" },
+          { "time": "16:00", "title": "温泉与旅馆晚餐", "detail": "安排室内休息，注意保暖", "cost": 0, "duration": 120, "category": "餐饮费" }
+        ]
+      },
+      {
+        "title": "札幌返程 · 旅途收尾",
+        "startTime": "09:00",
+        "activities": [
+          { "time": "09:00", "title": "早餐与退房", "detail": "确认随身物品与行李", "cost": 0, "duration": 60, "category": "餐饮费" },
+          { "time": "10:30", "title": "返回札幌与机场", "detail": "预留冬季交通缓冲时间", "cost": 4200, "duration": 120, "category": "交通费" },
+          { "time": "13:00", "title": "机场午餐与伴手礼", "detail": "确认登机时间后安排采购", "cost": 3200, "duration": 90, "category": "餐饮费" }
+        ]
+      }
+    ]
+  }
+}

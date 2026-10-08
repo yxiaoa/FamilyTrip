@@ -1,0 +1,66 @@
+{
+  "format": "FamilyTrip",
+  "schemaVersion": 10,
+  "trip": {
+    "name": "京都慢游 · 春日家庭行",
+    "destination": "日本京都",
+    "startDate": "2026-04-03",
+    "endDate": "2026-04-07",
+    "members": 4,
+    "days": [
+      {
+        "title": "抵达京都 · 古都初见",
+        "startTime": "09:30",
+        "activities": [
+          { "time": "09:30", "title": "抵达关西机场", "detail": "机场接送 · 约 1小时20分", "cost": 620, "duration": 80, "category": "交通费" },
+          { "time": "11:10", "title": "前往京都站", "detail": "包车 · 约 1小时20分", "cost": 360, "duration": 80, "category": "交通费" },
+          { "time": "12:40", "title": "午餐 · 京都拉面小路", "detail": "京都站 10F · 预计 1小时", "cost": 480, "duration": 60, "category": "餐饮费" },
+          { "time": "14:00", "title": "入住 · 四季京都酒店", "detail": "东山区 · 2间家庭房", "cost": 8900, "duration": 30, "category": "住宿费", "type": "accommodation" },
+          { "time": "15:00", "title": "清水寺与二年坂", "detail": "步行游览 · 约 2小时", "cost": 1600, "duration": 120, "category": "门票" }
+        ]
+      },
+      {
+        "title": "岚山竹林 · 渡月桥",
+        "startTime": "09:00",
+        "activities": [
+          { "time": "09:00", "title": "前往岚山", "detail": "从京都站搭乘 JR · 约 25分钟", "cost": 120, "duration": 30, "category": "交通费" },
+          { "time": "10:00", "title": "岚山竹林小径", "detail": "步行游览 · 预留 1小时", "cost": 0, "duration": 60, "category": "其他" },
+          { "time": "11:30", "title": "天龙寺庭园", "detail": "世界文化遗产 · 庭园散步", "cost": 1000, "duration": 75, "category": "门票" },
+          { "time": "13:00", "title": "午餐 · 汤豆腐料理", "detail": "岚山当地特色 · 建议提前预约", "cost": 2400, "duration": 75, "category": "餐饮费" },
+          { "time": "15:00", "title": "渡月桥与河畔散步", "detail": "自由活动 · 可安排咖啡休息", "cost": 0, "duration": 90, "category": "其他" }
+        ]
+      },
+      {
+        "title": "伏见稻荷 · 宇治抹茶",
+        "startTime": "08:30",
+        "activities": [
+          { "time": "08:30", "title": "伏见稻荷大社", "detail": "早点出发避开人潮 · 千本鸟居", "cost": 0, "duration": 120, "category": "其他" },
+          { "time": "11:00", "title": "前往宇治", "detail": "搭乘 JR 奈良线 · 约 20分钟", "cost": 100, "duration": 25, "category": "交通费" },
+          { "time": "12:00", "title": "午餐 · 宇治茶荞麦面", "detail": "宇治桥周边", "cost": 1800, "duration": 60, "category": "餐饮费" },
+          { "time": "13:30", "title": "平等院与博物馆", "detail": "凤凰堂参观 · 预留 1小时30分", "cost": 1200, "duration": 90, "category": "门票" },
+          { "time": "15:30", "title": "抹茶甜点与伴手礼", "detail": "宇治表参道自由活动", "cost": 1600, "duration": 60, "category": "餐饮费" }
+        ]
+      },
+      {
+        "title": "奈良一日 · 与鹿相遇",
+        "startTime": "09:00",
+        "activities": [
+          { "time": "09:00", "title": "京都出发前往奈良", "detail": "搭乘近铁 · 约 45分钟", "cost": 320, "duration": 50, "category": "交通费" },
+          { "time": "10:00", "title": "奈良公园与东大寺", "detail": "喂鹿请留意儿童安全 · 大佛殿参观", "cost": 1200, "duration": 150, "category": "门票" },
+          { "time": "12:45", "title": "午餐 · 奈良釜饭", "detail": "近铁奈良站周边", "cost": 2200, "duration": 70, "category": "餐饮费" },
+          { "time": "14:15", "title": "春日大社", "detail": "林间参道散步 · 约 1小时", "cost": 1000, "duration": 60, "category": "门票" },
+          { "time": "16:00", "title": "返回京都", "detail": "近铁返回京都站", "cost": 320, "duration": 50, "category": "交通费" }
+        ]
+      },
+      {
+        "title": "返程 · 带着春色回家",
+        "startTime": "09:00",
+        "activities": [
+          { "time": "09:00", "title": "退房与行李寄存", "detail": "确认随身物品与护照", "cost": 0, "duration": 30, "category": "其他" },
+          { "time": "10:00", "title": "京都站采购伴手礼", "detail": "预留机场交通时间", "cost": 3000, "duration": 90, "category": "旅行物品" },
+          { "time": "12:00", "title": "前往关西机场", "detail": "机场巴士或预约接送", "cost": 1440, "duration": 90, "category": "交通费" }
+        ]
+      }
+    ]
+  }
+}
