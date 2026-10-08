@@ -129,19 +129,44 @@
 }
 
 .day-heading {
-  flex: 1;
   min-width: 0;
+}
+
+.day-column-header {
+  display: block;
+  min-height: 0;
+  padding: 11px 13px 9px;
+}
+
+.day-heading-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.day-heading-meta .day-label {
+  color: #b8a59f;
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+
+.day-heading-meta small {
+  color: #aaa;
+  font-size: 10px;
 }
 
 .day-heading-line {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
 }
 
 .day-column-header .day-heading-line h3 {
   min-width: 0;
+  margin: 0;
   overflow-wrap: anywhere;
+  font-size: 13px;
 }
 
 .day-title-edit,
@@ -157,7 +182,31 @@
 }
 
 .day-title-edit {
-  padding: 4px;
+  padding: 3px;
+}
+
+.day-plan-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.day-column .day-start {
+  margin: 0;
+}
+
+.day-column .day-start input {
+  padding: 3px 5px;
+  font-size: 10px;
+}
+
+.day-column .day-plan-actions .plan-button,
+.day-column .day-plan-actions .alternative-chip {
+  padding: 4px 6px;
+  font-size: 9px;
 }
 
 .day-title-edit:hover,
@@ -170,7 +219,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  margin: 5px 0;
+  margin: 4px 0;
 }
 
 .day-title-editor[hidden] {
@@ -202,5 +251,14 @@
     padding: 8px 10px;
     margin-left: 4px;
     font-size: 10px;
+  }
+
+  .day-column-header {
+    padding: 10px 12px 8px;
+  }
+
+  .day-plan-actions {
+    gap: 4px;
+    margin-top: 6px;
   }
 }

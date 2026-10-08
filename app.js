@@ -167,7 +167,10 @@ function normalizeTrip(trip) {
   const familyMembers = (Array.isArray(trip.familyMembers) && trip.familyMembers.length ? trip.familyMembers : defaultFamilyMembers(members)).map(normalizeMember);
   const customCurrencies = normalizeCustomCurrencies(trip.customCurrencies);
   const currencies = [...supportedCurrencies, ...customCurrencies.map(currency => currency.code)];
-  const exchangeRates = Object.fromEntries(currencies.map(currency => [currency, currency === 'CNY' ? 1 : Math.max(0.0001, Number(trip.exchangeRates?.[currency]) || defaultExchangeRates[currency] || 1)]));
+  const exchangeRates = Object.fromEntries(currencies.map(currency => {
+    const rate = Number(trip.exchangeRates?.[currency]);
+    return [currency, currency === 'CNY' ? 1 : Number.isFinite(rate) && rate > 0 ? rate : defaultExchangeRates[currency] || 1];
+  }));
   const displayCurrency = currencies.includes(trip.displayCurrency) ? trip.displayCurrency : 'CNY';
   const todos = Array.isArray(trip.todos) ? trip.todos.map((todo, index) => normalizeTodo(todo, index)) : defaultTodos();
   const customCategories = [...new Set((Array.isArray(trip.customCategories) ? trip.customCategories : []).map(category => String(category).trim()).filter(category => category && !builtInCategories.includes(category)))].slice(0, 30);
@@ -201,10 +204,15 @@ function normalizeTodo(todo, index) {
   return { id: todo.id || `todo-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`, text: String(todo.text || '').trim(), completed: todo.completed === true };
 }
 function normalizeMember(member, index) {
-  const age = member.age === null || member.age === '' ? null : Number(member.age);
+  const parsedAge = member.age === null || member.age === '' ? null : Number(member.age);
+  const age = Number.isFinite(parsedAge) ? parsedAge : null;
   const role = age !== null ? (age < 12 ? '儿童' : age >= 60 ? '老人' : '成人') : (member.role || '成人');
   const defaults = role === '儿童' ? 0.5 : role === '老人' ? 0.8 : 1;
-  return { id: member.id || `member-${index + 1}`, name: member.name || `成员 ${index + 1}`, role, age, weights: { transport: Number(member.weights?.transport ?? defaults), ticket: Number(member.weights?.ticket ?? defaults), dining: Number(member.weights?.dining ?? defaults) } };
+  const normalizeWeight = value => {
+    const weight = Number(value);
+    return Number.isFinite(weight) ? Math.min(2, Math.max(0, weight)) : defaults;
+  };
+  return { id: member.id || `member-${index + 1}`, name: member.name || `成员 ${index + 1}`, role, age, weights: { transport: normalizeWeight(member.weights?.transport ?? defaults), ticket: normalizeWeight(member.weights?.ticket ?? defaults), dining: normalizeWeight(member.weights?.dining ?? defaults) } };
 }
 function normalizeActivity(activity, currencies = supportedCurrencies) {
   const alternatives = Array.isArray(activity.alternatives) ? activity.alternatives.map(item => normalizeActivity({ ...item, alternatives: [] }, currencies)) : [];
@@ -223,7 +231,8 @@ function normalizeActivity(activity, currencies = supportedCurrencies) {
   if (hasCost) {
     normalized.category = activity.category || '其他';
     normalized.costMode = activity.costMode === 'perPerson' ? 'perPerson' : 'total';
-    normalized.cost = Math.max(0, Number(activity.cost) || 0);
+    const cost = Number(activity.cost);
+    normalized.cost = Number.isFinite(cost) ? Math.max(0, cost) : 0;
     normalized.currency = currencies.includes(activity.currency) ? activity.currency : 'CNY';
   } else {
     delete normalized.category;
@@ -600,7 +609,7 @@ function renderTimeline() {
     const dayNumber = day.isDayZero ? 0 : dayIndex + 1 - (hasDayZero ? 1 : 0);
     const dayAlternatives = day.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-day="${dayIndex}" data-alternative-index="${alternativeIndex}" data-action="select-day-alternative">备用：${escapeHtml(alternative.name)}</button>`).join('');
     return `<section class="day-column" data-day="${dayIndex}">
-      <div class="day-column-header"><div class="day-heading"><span class="day-label">DAY ${dayNumber}</span><div class="day-heading-line"><h3>${escapeHtml(day.title)}</h3><button class="day-title-edit" type="button" data-edit-day-title="${dayIndex}" aria-label="修改 DAY ${dayNumber} 标题" title="修改标题">✎</button></div><div class="day-title-editor" data-day-title-editor="${dayIndex}" hidden><input type="text" maxlength="60" aria-label="每日标题"><button type="button" data-save-day-title="${dayIndex}">保存</button><button type="button" data-cancel-day-title="${dayIndex}">取消</button></div><small>${formatDate(date)}</small></div><div class="day-plan-actions"><label class="day-start">开始 <input data-day-start="${dayIndex}" type="time" value="${day.startTime}"></label><button class="plan-button" data-day="${dayIndex}" data-action="add-day-alternative">＋ 备用整日</button>${dayAlternatives}</div></div>
+      <div class="day-column-header"><div class="day-heading"><div class="day-heading-meta"><span class="day-label">DAY ${dayNumber}</span><small>${formatDate(date)}</small></div><div class="day-heading-line"><h3>${escapeHtml(day.title)}</h3><button class="day-title-edit" type="button" data-edit-day-title="${dayIndex}" aria-label="修改 DAY ${dayNumber} 标题" title="修改标题">✎</button></div><div class="day-title-editor" data-day-title-editor="${dayIndex}" hidden><input type="text" maxlength="60" aria-label="每日标题"><button type="button" data-save-day-title="${dayIndex}">保存</button><button type="button" data-cancel-day-title="${dayIndex}">取消</button></div></div><div class="day-plan-actions"><label class="day-start">开始 <input data-day-start="${dayIndex}" type="time" value="${day.startTime}"></label><button class="plan-button" data-day="${dayIndex}" data-action="add-day-alternative">＋ 备用整日</button>${dayAlternatives}</div></div>
       <div class="timeline">${activityHtml}<button class="day-add-button" data-action="add-day-activity" data-day="${dayIndex}">＋ 添加安排</button></div>
     </section>`;
   }).join('');
