@@ -13,10 +13,11 @@ const seedDays = [
   ...['岚山竹林 · 渡月桥', '伏见稻荷 · 宇治抹茶', '奈良一日 · 与鹿相遇', '返程 · 带着春色回家'].map(title => ({ title, startTime: '09:00', activities: [] }))
 ];
 const stateKey = 'familyTripPlanner';
-const CURRENT_SCHEMA_VERSION = 9;
+const CURRENT_SCHEMA_VERSION = 10;
 const builtInCategories = ['交通费', '机票', '住宿费', '旅行物品', '餐饮费', '门票', '其他'];
-const supportedCurrencies = ['CNY', 'JPY', 'USD', 'HKD', 'EUR'];
-const defaultExchangeRates = { CNY: 1, JPY: 0.05, USD: 7.2, HKD: 0.92, EUR: 7.8 };
+const supportedCurrencies = ['CNY', 'JPY', 'USD', 'HKD', 'MOP', 'EUR'];
+const defaultExchangeRates = { CNY: 1, JPY: 0.05, USD: 7.2, HKD: 0.92, MOP: 0.9, EUR: 7.8 };
+const builtInCurrencyNames = { CNY: '人民币', JPY: '日元', USD: '美元', HKD: '港币', MOP: '澳门币', EUR: '欧元' };
 const tripHandleDatabaseName = 'familyTripFileHandles';
 const tripHandleStoreName = 'handles';
 function parseStoredState() {
@@ -164,11 +165,28 @@ function normalizeTrip(trip) {
   const days = Array.isArray(trip.days) && trip.days.length ? trip.days : [{ title: '第一天', startTime: '09:00', activities: [] }];
   const members = Number(trip.members) || 1;
   const familyMembers = (Array.isArray(trip.familyMembers) && trip.familyMembers.length ? trip.familyMembers : defaultFamilyMembers(members)).map(normalizeMember);
-  const exchangeRates = Object.fromEntries(supportedCurrencies.map(currency => [currency, currency === 'CNY' ? 1 : Math.max(0.0001, Number(trip.exchangeRates?.[currency]) || defaultExchangeRates[currency])]));
-  const displayCurrency = supportedCurrencies.includes(trip.displayCurrency) ? trip.displayCurrency : 'CNY';
+  const customCurrencies = normalizeCustomCurrencies(trip.customCurrencies);
+  const currencies = [...supportedCurrencies, ...customCurrencies.map(currency => currency.code)];
+  const exchangeRates = Object.fromEntries(currencies.map(currency => [currency, currency === 'CNY' ? 1 : Math.max(0.0001, Number(trip.exchangeRates?.[currency]) || defaultExchangeRates[currency] || 1)]));
+  const displayCurrency = currencies.includes(trip.displayCurrency) ? trip.displayCurrency : 'CNY';
   const todos = Array.isArray(trip.todos) ? trip.todos.map((todo, index) => normalizeTodo(todo, index)) : defaultTodos();
   const customCategories = [...new Set((Array.isArray(trip.customCategories) ? trip.customCategories : []).map(category => String(category).trim()).filter(category => category && !builtInCategories.includes(category)))].slice(0, 30);
-  return { ...trip, members: familyMembers.length, familyMembers, exchangeRates, displayCurrency, todos, customCategories, days: days.map((day, index) => ({ ...day, isDayZero: index === 0 && day.isDayZero === true, title: index === 0 && day.isDayZero ? '行前准备' : day.title, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: Array.isArray(day.activities) ? day.activities.map(normalizeActivity) : [], alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(normalizeDayAlternative) : [] })) };
+  return { ...trip, members: familyMembers.length, familyMembers, customCurrencies, exchangeRates, displayCurrency, todos, customCategories, days: days.map((day, index) => ({ ...day, isDayZero: index === 0 && day.isDayZero === true, title: index === 0 && day.isDayZero ? '行前准备' : day.title, startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: keepAccommodationLast(Array.isArray(day.activities) ? day.activities.map(activity => normalizeActivity(activity, currencies)) : []), alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(alternative => normalizeDayAlternative(alternative, currencies)) : [] })) };
+}
+function normalizeCustomCurrencies(customCurrencies) {
+  const usedCodes = new Set(supportedCurrencies);
+  return (Array.isArray(customCurrencies) ? customCurrencies : []).reduce((currencies, currency) => {
+    if (!currency || typeof currency !== 'object') return currencies;
+    const code = String(currency.code || '').trim().toUpperCase();
+    const name = String(currency.name || '').trim();
+    if (!/^[A-Z]{3}$/.test(code) || !name || usedCodes.has(code) || currencies.length >= 30) return currencies;
+    usedCodes.add(code);
+    currencies.push({ code, name });
+    return currencies;
+  }, []);
+}
+function currencyCodes(trip) {
+  return [...supportedCurrencies, ...trip.customCurrencies.map(currency => currency.code)];
 }
 function defaultTodos() {
   return [
@@ -188,8 +206,8 @@ function normalizeMember(member, index) {
   const defaults = role === '儿童' ? 0.5 : role === '老人' ? 0.8 : 1;
   return { id: member.id || `member-${index + 1}`, name: member.name || `成员 ${index + 1}`, role, age, weights: { transport: Number(member.weights?.transport ?? defaults), ticket: Number(member.weights?.ticket ?? defaults), dining: Number(member.weights?.dining ?? defaults) } };
 }
-function normalizeActivity(activity) {
-  const alternatives = Array.isArray(activity.alternatives) ? activity.alternatives.map(item => normalizeActivity({ ...item, alternatives: [] })) : [];
+function normalizeActivity(activity, currencies = supportedCurrencies) {
+  const alternatives = Array.isArray(activity.alternatives) ? activity.alternatives.map(item => normalizeActivity({ ...item, alternatives: [] }, currencies)) : [];
   const type = ['accommodation', 'transport', 'purchase'].includes(activity.type) ? activity.type : 'activity';
   const hasTime = typeof activity.hasTime === 'boolean' ? activity.hasTime : !isUntimedActivity({ type });
   const hasCost = typeof activity.hasCost === 'boolean' ? activity.hasCost : true;
@@ -206,7 +224,7 @@ function normalizeActivity(activity) {
     normalized.category = activity.category || '其他';
     normalized.costMode = activity.costMode === 'perPerson' ? 'perPerson' : 'total';
     normalized.cost = Math.max(0, Number(activity.cost) || 0);
-    normalized.currency = supportedCurrencies.includes(activity.currency) ? activity.currency : 'CNY';
+    normalized.currency = currencies.includes(activity.currency) ? activity.currency : 'CNY';
   } else {
     delete normalized.category;
     delete normalized.costMode;
@@ -218,8 +236,16 @@ function normalizeActivity(activity) {
 function isUntimedActivity(activity) {
   return activity.type === 'accommodation' || activity.type === 'purchase';
 }
-function normalizeDayAlternative(alternative) {
-  return { id: alternative.id || `day-option-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: alternative.name || '备用方案', activities: Array.isArray(alternative.activities) ? alternative.activities.map(normalizeActivity) : [] };
+function keepAccommodationLast(activities) {
+  const ordered = [
+    ...activities.filter(activity => activity.type !== 'accommodation'),
+    ...activities.filter(activity => activity.type === 'accommodation')
+  ];
+  activities.splice(0, activities.length, ...ordered);
+  return activities;
+}
+function normalizeDayAlternative(alternative, currencies = supportedCurrencies) {
+  return { id: alternative.id || `day-option-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: alternative.name || '备用方案', activities: keepAccommodationLast(Array.isArray(alternative.activities) ? alternative.activities.map(activity => normalizeActivity(activity, currencies)) : []) };
 }
 function activityTotal(activity, members) {
   return Number(activity.cost || 0) * (activity.costMode === 'perPerson' ? members : 1);
@@ -246,6 +272,21 @@ function activityTotalCny(activity, trip) {
 function formatCurrency(amount, currency) {
   const digits = currency === 'JPY' ? 0 : 2;
   return new Intl.NumberFormat('zh-CN', { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(amount);
+}
+function currencyOptions(trip) {
+  const options = [
+    ...supportedCurrencies.map(code => ({ code, name: builtInCurrencyNames[code] })),
+    ...trip.customCurrencies
+  ];
+  return options.map(({ code, name }) => `<option value="${escapeHtml(code)}">${escapeHtml(name)} ${escapeHtml(code)}</option>`).join('');
+}
+function renderCurrencyOptions(trip = currentTrip()) {
+  const options = currencyOptions(trip);
+  const activityCurrency = $('#activityCurrency').value;
+  $('#displayCurrency').innerHTML = options;
+  $('#activityCurrency').innerHTML = options;
+  $('#displayCurrency').value = trip.displayCurrency;
+  $('#activityCurrency').value = trip.exchangeRates[activityCurrency] ? activityCurrency : 'CNY';
 }
 function renderCategoryOptions(selectedCategory = '') {
   const categories = [...builtInCategories, ...currentTrip().customCategories];
@@ -528,18 +569,20 @@ function renderTimeline() {
     const activityHtml = activities.length ? activities.map((activity, index) => {
       const start = activityStartTime(day, index);
       const conflicts = timeConflicts.get(index) || [];
+      const isAccommodation = activity.type === 'accommodation';
       const isTransport = activity.type === 'transport';
       const isPurchase = activity.type === 'purchase';
       const gap = activity.hasTime ? gapHtml(dayIndex, index, previousEnd, start) : '';
       if (activity.hasTime) previousEnd = start + Number(activity.duration);
       const alternativeButtons = activity.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-action="select-activity-alternative" data-alternative-index="${alternativeIndex}">备选：${escapeHtml(alternative.title)}</button>`).join('');
       const routeHtml = isTransport ? `<div class="activity-route"><span>${escapeHtml(activity.fromLocation || '出发地点')}</span><b aria-label="前往">→</b><span>${escapeHtml(activity.toLocation || '到达地点')}</span></div>` : '';
-      const timeHtml = activity.hasTime ? `<span>${formatTime(start)}</span><small>${activity.duration}分钟</small>` : '<span>未记录时间</span>';
+      const timeHtml = isAccommodation ? '<span class="accommodation-time-label">住宿</span>' : activity.hasTime ? `<span>${formatTime(start)}</span><small>${activity.duration}分钟</small>` : '<span>未记录时间</span>';
       const conflictHtml = conflicts.length ? `<div class="time-overlap-warning" role="status">⚠ 时间重叠：${conflicts.map(conflict => `与「${escapeHtml(conflict.title)}」重叠 ${conflict.minutes} 分钟`).join('；')}</div>` : '';
-      return `${gap}<div class="activity${!activity.hasTime ? ' activity-untimed' : ''}${isTransport ? ' activity-transport' : ''}${isPurchase ? ' activity-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
-        <div class="activity-card${activity.completed ? ' is-complete' : ''}${!activity.hasTime ? ' is-untimed' : ''}${isTransport ? ' is-transport' : ''}${isPurchase ? ' is-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="拖动安排：${escapeHtml(activity.title)}"><div class="activity-main"><div><h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
+      const movementActions = isAccommodation ? '' : '<button data-action="up">上移</button><button data-action="down">下移</button><button data-action="insert-before">在之前插入行程</button><button data-action="insert-after">在之后插入行程</button>';
+      return `${gap}<div class="activity${!activity.hasTime ? ' activity-untimed' : ''}${isAccommodation ? ' activity-accommodation' : ''}${isTransport ? ' activity-transport' : ''}${isPurchase ? ' activity-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
+        <div class="activity-card${activity.completed ? ' is-complete' : ''}${!activity.hasTime ? ' is-untimed' : ''}${isAccommodation ? ' is-accommodation' : ''}${isTransport ? ' is-transport' : ''}${isPurchase ? ' is-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="${isAccommodation ? '住宿安排，可拖动到其他天：' : '拖动安排：'}${escapeHtml(activity.title)}"><div class="activity-main"><div><h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
           ${activity.hasCost ? `<div class="activity-meta"><strong>${escapeHtml(activity.category)} ${formatCurrency(activityTotalForTrip(activity, trip), activity.currency)}</strong></div>` : ''}
-        <details class="activity-menu"><summary aria-label="更多操作" title="更多操作">⋮</summary><div class="activity-menu-items"><button data-action="toggle-complete" aria-pressed="${activity.completed}">${activity.completed ? '取消完成' : '标记完成'}</button><button data-action="up">上移</button><button data-action="down">下移</button><button data-action="insert-before">在之前插入行程</button><button data-action="insert-after">在之后插入行程</button><button data-action="edit">编辑</button><button data-action="add-alternative">添加备用安排</button><button data-action="delete">删除</button></div></details>
+        <details class="activity-menu"><summary aria-label="更多操作" title="更多操作">⋮</summary><div class="activity-menu-items"><button data-action="toggle-complete" aria-pressed="${activity.completed}">${activity.completed ? '取消完成' : '标记完成'}</button>${movementActions}<button data-action="edit">编辑</button><button data-action="add-alternative">添加备用安排</button><button data-action="delete">删除</button></div></details>
         ${conflictHtml}
         ${alternativeButtons ? `<div class="activity-alternatives"><span>备用方案：</span>${alternativeButtons}</div>` : ''}</div></div>`;
     }).join('') : '<div class="empty-state">暂无安排</div>';
@@ -584,6 +627,8 @@ function renderTimeline() {
       const alternativeIndex = Number(actionElement.dataset.alternativeIndex);
       const alternative = trip.days[dayIndex].alternatives[alternativeIndex];
       [trip.days[dayIndex].activities, alternative.activities] = [alternative.activities, trip.days[dayIndex].activities];
+      keepAccommodationLast(trip.days[dayIndex].activities);
+      keepAccommodationLast(alternative.activities);
       persist(); renderTimeline(); updateCost(); showToast(`已切换到整日备用方案“${alternative.name}”，原方案已保留为备用`);
       return;
     }
@@ -601,6 +646,7 @@ function renderTimeline() {
       const alternative = activity.alternatives[alternativeIndex];
       Object.assign(activity, { ...alternative, alternatives: activity.alternatives });
       activity.alternatives[alternativeIndex] = primary;
+      keepAccommodationLast(activities);
       persist(); renderTimeline(); updateCost(); showToast('已切换活动备用方案，原安排已保留为备用');
       return;
     }
@@ -609,8 +655,8 @@ function renderTimeline() {
     }
     if (action === 'edit') { selectedDay = dayIndex; return openEditor(index); }
     if (action === 'delete') { activities.splice(index, 1); persist(); renderTimeline(); updateCost(); showToast('安排已删除'); return; }
-    if (action === 'up' && index > 0) [activities[index - 1], activities[index]] = [activities[index], activities[index - 1]];
-    if (action === 'down' && index < activities.length - 1) [activities[index], activities[index + 1]] = [activities[index + 1], activities[index]];
+    if (action === 'up' && activities[index].type !== 'accommodation' && index > 0) [activities[index - 1], activities[index]] = [activities[index], activities[index - 1]];
+    if (action === 'down' && activities[index].type !== 'accommodation' && index < activities.length - 1 && activities[index + 1].type !== 'accommodation') [activities[index], activities[index + 1]] = [activities[index + 1], activities[index]];
     if (action === 'up' || action === 'down') { persist(); renderTimeline(); showToast('顺序已调整，后续时间自动顺延'); }
   }));
   let draggedActivity = null;
@@ -667,18 +713,32 @@ function renderTimeline() {
     trip.days[dayIndex].startTime = event.target.value || '09:00';
     persist(); renderTimeline(); showToast('开始时间已更新，全天行程自动顺延');
   }));
+  daysBoard.querySelectorAll('[data-day-start]').forEach(input => input.addEventListener('input', event => {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(event.target.value)) return;
+    trip.days[Number(event.target.dataset.dayStart)].startTime = event.target.value;
+    persist();
+  }));
 }
 function moveActivity(sourceDayIndex, sourceIndex, targetDayIndex, targetIndex) {
   const trip = currentTrip();
   const sourceActivities = trip.days[sourceDayIndex]?.activities;
   const targetActivities = trip.days[targetDayIndex]?.activities;
   if (!sourceActivities || !targetActivities || !sourceActivities[sourceIndex]) return;
+  const activity = sourceActivities[sourceIndex];
+  if (sourceDayIndex === targetDayIndex && activity.type === 'accommodation') return;
   if (sourceDayIndex === targetDayIndex && (targetIndex === sourceIndex || targetIndex === sourceIndex + 1)) return;
-  const [activity] = sourceActivities.splice(sourceIndex, 1);
+  sourceActivities.splice(sourceIndex, 1);
   activity.timeLocked = false;
   delete activity.time;
   const adjustedIndex = sourceDayIndex === targetDayIndex && targetIndex > sourceIndex ? targetIndex - 1 : targetIndex;
-  targetActivities.splice(Math.max(0, Math.min(adjustedIndex, targetActivities.length)), 0, activity);
+  const firstAccommodationIndex = targetActivities.findIndex(item => item.type === 'accommodation');
+  const lastAllowedIndex = firstAccommodationIndex < 0 ? targetActivities.length : firstAccommodationIndex;
+  const insertionIndex = activity.type === 'accommodation'
+    ? targetActivities.length
+    : Math.max(0, Math.min(adjustedIndex, lastAllowedIndex));
+  targetActivities.splice(insertionIndex, 0, activity);
+  keepAccommodationLast(sourceActivities);
+  if (targetActivities !== sourceActivities) keepAccommodationLast(targetActivities);
   persist();
   renderTimeline();
   updateCost();
@@ -686,6 +746,7 @@ function moveActivity(sourceDayIndex, sourceIndex, targetDayIndex, targetIndex) 
 }
 function updateCost() {
   const trip = currentTrip();
+  renderCurrencyOptions(trip);
   const total = expenseTotal(trip);
   const displayCurrency = trip.displayCurrency;
   const displayedTotal = convertFromCny(total, displayCurrency, trip);
@@ -710,6 +771,7 @@ function renderTripHeader() {
 function renderApp() {
   const trip = currentTrip();
   selectedDay = Math.min(selectedDay, trip.days.length - 1);
+  renderCurrencyOptions(trip);
   renderTripHeader(); renderTimeline(); renderTodos(); updateCost();
   updateDayZeroButton();
 }
@@ -751,7 +813,7 @@ function openEditor(index = -1) {
   $('#activityType').value = activity.type || 'activity';
   $('#transportFrom').value = activity.fromLocation || '';
   $('#transportTo').value = activity.toLocation || '';
-  renderCategoryOptions(activity.category || '其他'); $('#activityCost').value = activity.cost; $('#activityCurrency').value = activity.currency || 'CNY'; setActivityCostMode(activity.costMode || 'total'); $('#activityDuration').value = activity.duration;
+  renderCategoryOptions(activity.category || '其他'); renderCurrencyOptions(); $('#activityCost').value = activity.cost; $('#activityCurrency').value = activity.currency || 'CNY'; setActivityCostMode(activity.costMode || 'total'); $('#activityDuration').value = activity.duration;
   const day = currentTrip().days[selectedDay];
   const suggestedIndex = insertingActivityIndex < 0 ? day.activities.length : insertingActivityIndex;
   $('#activityStartTime').value = index >= 0 && activity.timeLocked ? activity.time : newActivityTime || formatTime(activityStartTime(day, index >= 0 ? index : suggestedIndex));
@@ -762,14 +824,30 @@ function openEditor(index = -1) {
 }
 function openCurrencyDialog() {
   const trip = currentTrip();
-  supportedCurrencies.filter(currency => currency !== 'CNY').forEach(currency => {
-    $(`#rate${currency}`).value = trip.exchangeRates[currency];
-  });
+  renderCurrencyRates(trip);
   currencyDialog.showModal();
-  $('#rateJPY').focus();
+  $('#currencyRateGrid input').focus();
 }
-['activityStartTime', 'activityDuration'].forEach(id => document.querySelector(`#${id}`).addEventListener('change', syncActivityEndTime));
-document.querySelector('#activityEndTime').addEventListener('change', syncActivityDuration);
+function renderCurrencyRates(trip = currentTrip()) {
+  $('#currencyRateGrid').innerHTML = currencyCodes(trip)
+    .filter(currency => currency !== 'CNY')
+    .map(currency => {
+      const name = builtInCurrencyNames[currency] || trip.customCurrencies.find(item => item.code === currency).name;
+      return `<label>${escapeHtml(name)} ${escapeHtml(currency)}<input id="rate${escapeHtml(currency)}" type="number" min="0.0001" step="any" value="${trip.exchangeRates[currency]}" required></label>`;
+    }).join('');
+}
+['activityStartTime', 'activityDuration'].forEach(id => document.querySelector(`#${id}`).addEventListener('input', syncActivityEndTime));
+document.querySelector('#activityEndTime').addEventListener('input', syncActivityDuration);
+document.addEventListener('wheel', event => {
+  const input = event.target.closest?.('input[type="time"]');
+  if (!input || !event.deltaY) return;
+  event.preventDefault();
+  const [hours, minutes] = (input.value || '09:00').split(':').map(Number);
+  const direction = event.deltaY < 0 ? 1 : -1;
+  const nextMinutes = (hours * 60 + minutes + direction * 5 + 1440) % 1440;
+  input.value = formatTime(nextMinutes);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}, { passive: false });
 $('#activityType').addEventListener('change', event => {
   const defaultCategory = { accommodation: '住宿费', transport: '交通费', purchase: '旅行物品' }[event.target.value];
   if (defaultCategory) renderCategoryOptions(defaultCategory);
@@ -799,7 +877,7 @@ form.addEventListener('submit', event => {
     type, fromLocation, toLocation, title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), hasTime, hasCost,
     ...(hasTime ? { duration, time: startTime, timeLocked: Boolean(startTime) } : {}),
     ...(hasCost ? { category: $('#activityCategory').value, cost: Number($('#activityCost').value) || 0, currency: $('#activityCurrency').value, costMode: $('#activityCostMode').value } : {})
-  });
+  }, currencyCodes(currentTrip()));
   if (!activity.title) return showToast('请填写安排名称');
   const day = currentTrip().days[selectedDay];
   const suggestedIndex = insertingActivityIndex < 0 ? day.activities.length : insertingActivityIndex;
@@ -808,12 +886,13 @@ form.addEventListener('submit', event => {
   if (addingActivityAlternative) {
     currentTrip().days[selectedDay].activities[editingIndex].alternatives.push(activity);
   } else if (editingIndex >= 0) {
-    currentTrip().days[selectedDay].activities[editingIndex] = normalizeActivity({ ...currentTrip().days[selectedDay].activities[editingIndex], ...activity });
+    currentTrip().days[selectedDay].activities[editingIndex] = normalizeActivity({ ...currentTrip().days[selectedDay].activities[editingIndex], ...activity }, currencyCodes(currentTrip()));
   }
   else {
     if (!activity.timeLocked) delete activity.time;
     currentTrip().days[selectedDay].activities.splice(insertingActivityIndex < 0 ? currentTrip().days[selectedDay].activities.length : insertingActivityIndex, 0, activity);
   }
+  keepAccommodationLast(currentTrip().days[selectedDay].activities);
   const wasAlternative = addingActivityAlternative;
   const wasInserted = insertingAroundActivity;
   addingActivityAlternative = false; insertingActivityIndex = -1; insertingAroundActivity = false; newActivityTime = '';
@@ -1098,15 +1177,37 @@ $('#displayCurrency').addEventListener('change', event => {
 });
 $('#currencySettings').addEventListener('click', openCurrencyDialog);
 ['closeCurrencyDialog', 'cancelCurrencyDialog'].forEach(id => $(`#${id}`).addEventListener('click', () => currencyDialog.close()));
+$('#newCurrencyCode').addEventListener('input', event => { event.target.value = event.target.value.toUpperCase(); });
+$('#addCurrency').addEventListener('click', () => {
+  const trip = currentTrip();
+  const name = $('#newCurrencyName').value.trim();
+  const code = $('#newCurrencyCode').value.trim().toUpperCase();
+  const rate = Number($('#newCurrencyRate').value);
+  if (!name) return showToast('请输入币种名称');
+  if (!/^[A-Z]{3}$/.test(code)) return showToast('币种代码需为 3 位英文字母');
+  if ([...supportedCurrencies, ...trip.customCurrencies.map(currency => currency.code)].includes(code)) return showToast('该币种代码已存在');
+  if (!Number.isFinite(rate) || rate <= 0) return showToast('汇率必须大于 0');
+  if (trip.customCurrencies.length >= 30) return showToast('最多添加 30 种自定义币种');
+  trip.customCurrencies.push({ name, code });
+  trip.exchangeRates[code] = rate;
+  persist();
+  $('#newCurrencyName').value = '';
+  $('#newCurrencyCode').value = '';
+  $('#newCurrencyRate').value = '';
+  renderCurrencyOptions(trip);
+  renderCurrencyRates(trip);
+  showToast(`已添加 ${name} ${code}，现在可在行程安排中选择`);
+});
 currencyForm.addEventListener('submit', event => {
   event.preventDefault();
   const exchangeRates = { CNY: 1 };
-  for (const currency of supportedCurrencies.filter(item => item !== 'CNY')) {
+  const trip = currentTrip();
+  for (const currency of currencyCodes(trip).filter(item => item !== 'CNY')) {
     const rate = Number($(`#rate${currency}`).value);
     if (!Number.isFinite(rate) || rate <= 0) return showToast(`${currency} 汇率必须大于 0`);
     exchangeRates[currency] = rate;
   }
-  currentTrip().exchangeRates = exchangeRates;
+  trip.exchangeRates = exchangeRates;
   persist();
   currencyDialog.close();
   renderTimeline();
@@ -1142,7 +1243,7 @@ planForm.addEventListener('submit', event => {
   const name = $('#planName').value.trim();
   if (dayIndex < 0 || !name) return showToast('请填写备用方案名称');
   const day = currentTrip().days[dayIndex];
-  day.alternatives.push(normalizeDayAlternative({ name, activities: day.activities.map(activity => ({ ...activity, alternatives: [] })) }));
+  day.alternatives.push(normalizeDayAlternative({ name, activities: day.activities.map(activity => ({ ...activity, alternatives: [] })) }, currencyCodes(currentTrip())));
   addingDayAlternativeIndex = -1;
   persist(); planDialog.close(); renderTimeline(); showToast('整日备用方案已添加');
 });

@@ -8,7 +8,8 @@
 }
 
 .activity-card.is-accommodation {
-  border-color: #e4ddf3;
+  border: 1px solid #e4ddf3;
+  border-left: 3px solid #9b88c8;
   background: #fcfaff;
 }
 
@@ -17,8 +18,21 @@
   font-weight: 600;
 }
 
+.accommodation-time-label {
+  display: inline-block;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: #f1ecff;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
 .activity-accommodation .activity-dot {
   border-color: #9b88c8;
+}
+
+.activity-card.is-accommodation {
+  cursor: grab;
 }
 
 .activity-card.is-transport {
