@@ -189,7 +189,7 @@ function normalizeTrip(trip) {
   const displayCurrency = currencies.includes(trip.displayCurrency) ? trip.displayCurrency : 'CNY';
   const todos = Array.isArray(trip.todos) ? trip.todos.map((todo, index) => normalizeTodo(todo, index)) : defaultTodos();
   const customCategories = [...new Set((Array.isArray(trip.customCategories) ? trip.customCategories : []).map(category => String(category).trim()).filter(category => category && !builtInCategories.includes(category)))].slice(0, 30);
-  return { ...trip, members: familyMembers.length, familyMembers, customCurrencies, exchangeRates, displayCurrency, todos, customCategories, days: days.map((day, index) => ({ ...day, isDayZero: index === 0 && day.isDayZero === true, isTitleCustom: day.isTitleCustom === true, title: day.title || (day.isDayZero ? '行前准备' : `第 ${index + 1} 天`), startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), activities: keepAccommodationLast(Array.isArray(day.activities) ? day.activities.map(activity => normalizeActivity(activity, currencies)) : []), alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(alternative => normalizeDayAlternative(alternative, currencies)) : [] })) };
+  return { ...trip, members: familyMembers.length, familyMembers, customCurrencies, exchangeRates, displayCurrency, todos, customCategories, days: days.map((day, index) => ({ ...day, isDayZero: index === 0 && day.isDayZero === true, isTitleCustom: day.isTitleCustom === true, title: day.title || (day.isDayZero ? '行前准备' : `第 ${index + 1} 天`), startTime: day.startTime || (index === 0 ? '09:30' : '09:00'), endTime: day.endTime || '21:00', activities: keepAccommodationLast(Array.isArray(day.activities) ? day.activities.map(activity => normalizeActivity(activity, currencies)) : []), alternatives: Array.isArray(day.alternatives) ? day.alternatives.map(alternative => normalizeDayAlternative(alternative, currencies)) : [] })) };
 }
 function normalizeCustomCurrencies(customCurrencies) {
   const usedCodes = new Set(supportedCurrencies);
@@ -231,7 +231,7 @@ function normalizeMember(member, index) {
 }
 function normalizeActivity(activity, currencies = supportedCurrencies) {
   const alternatives = Array.isArray(activity.alternatives) ? activity.alternatives.map(item => normalizeActivity({ ...item, alternatives: [] }, currencies)) : [];
-  const type = ['accommodation', 'transport', 'purchase', 'waiting'].includes(activity.type) ? activity.type : 'activity';
+  const type = ['accommodation', 'transport', 'overnightTransport', 'purchase', 'waiting'].includes(activity.type) ? activity.type : 'activity';
   const hasTime = type === 'waiting' || (typeof activity.hasTime === 'boolean' ? activity.hasTime : !isUntimedActivity({ type }));
   const hasCost = typeof activity.hasCost === 'boolean' ? activity.hasCost : true;
   const normalized = { ...activity, type, fromLocation: String(activity.fromLocation || ''), toLocation: String(activity.toLocation || ''), hasTime, hasCost, completed: activity.completed === true, alternatives };
@@ -485,7 +485,8 @@ function syncActivityDuration() {
   const startTime = $('#activityStartTime').value;
   const endTime = $('#activityEndTime').value;
   if (!startTime || !endTime) return;
-  const duration = timeToMinutes(endTime) - timeToMinutes(startTime);
+  let duration = timeToMinutes(endTime) - timeToMinutes(startTime);
+  if ($('#activityType').value === 'overnightTransport' && duration < 0) duration += 1440;
   if (duration >= 10 && duration <= 720) $('#activityDuration').value = duration;
 }
 function escapeHtml(value) {
@@ -551,7 +552,7 @@ function activityTimeConflicts(day) {
 function gapHtml(dayIndex, insertIndex, start, end) {
   const duration = end - start;
   if (duration < 10) return '';
-  return `<div class="schedule-gap"><span>无行程 · ${Math.floor(duration / 60)}小时${duration % 60 ? `${duration % 60}分钟` : ''}</span><button class="gap-add" data-action="insert-activity" data-day="${dayIndex}" data-insert-index="${insertIndex}" data-insert-time="${formatTime(start)}" data-insert-duration="${Math.min(duration, 720)}">＋ 插入安排</button></div>`;
+  return `<div class="schedule-gap"><span>未安排 · ${formatTime(start)}–${formatTime(end)} · ${Math.floor(duration / 60)}小时${duration % 60 ? `${duration % 60}分钟` : ''}</span><button class="gap-add" data-action="insert-activity" data-day="${dayIndex}" data-insert-index="${insertIndex}" data-insert-time="${formatTime(start)}" data-insert-duration="${Math.min(duration, 720)}">＋ 插入安排</button></div>`;
 }
 function updateTripProgress() {
   const trip = currentTrip();
@@ -562,26 +563,31 @@ function updateTripProgress() {
   $('#tripProgressBar').style.width = `${percentage}%`;
   $('#tripProgressBar').parentElement.setAttribute('aria-valuenow', percentage);
   $('#tripProgressCount').textContent = `${completed} / ${activities.length} 项安排已完成`;
-  const planningEnd = 21 * 60;
   let availableMinutes = 0;
   let plannedMinutes = 0;
+  let overtimeMinutes = 0;
   trip.days.forEach(day => {
     if (day.isDayZero) return;
     const dayStart = timeToMinutes(day.startTime);
-    availableMinutes += Math.max(0, planningEnd - dayStart);
+    const dayEnd = timeToMinutes(day.endTime || '21:00');
+    availableMinutes += Math.max(0, dayEnd - dayStart);
+    let latestScheduledEnd = dayStart;
     day.activities.forEach((activity, index) => {
       if (!activity.hasTime) return;
       const activityStart = activityStartTime(day, index);
       const activityEnd = activityStart + Math.max(0, Number(activity.duration) || 0);
-      plannedMinutes += Math.max(0, Math.min(activityEnd, planningEnd) - Math.max(activityStart, dayStart));
+      if (activity.type !== 'overnightTransport') latestScheduledEnd = Math.max(latestScheduledEnd, activityEnd);
+      plannedMinutes += Math.max(0, Math.min(activityEnd, dayEnd) - Math.max(activityStart, dayStart));
     });
+    overtimeMinutes += Math.max(0, latestScheduledEnd - dayEnd);
   });
   const planPercentage = availableMinutes ? Math.min(100, Math.round(plannedMinutes / availableMinutes * 100)) : 0;
   const formatHours = minutes => (minutes / 60).toLocaleString('zh-CN', { maximumFractionDigits: 1 });
   $('#tripPlanProgress').textContent = `${planPercentage}%`;
   $('#tripPlanProgressBar').style.width = `${planPercentage}%`;
   $('#tripPlanProgressBar').parentElement.setAttribute('aria-valuenow', planPercentage);
-  $('#tripPlanProgressCount').textContent = `${formatHours(plannedMinutes)} / ${formatHours(availableMinutes)} 小时已安排`;
+  const overtimeLabel = overtimeMinutes ? ` · 超时 ${Math.floor(overtimeMinutes / 60)}小时${overtimeMinutes % 60 ? `${overtimeMinutes % 60}分钟` : ''}` : '';
+  $('#tripPlanProgressCount').textContent = `${formatHours(plannedMinutes)} / ${formatHours(availableMinutes)} 小时已安排${overtimeLabel}`;
 }
 function renderTimeline() {
   const trip = currentTrip();
@@ -590,19 +596,29 @@ function renderTimeline() {
   daysBoard.innerHTML = trip.days.map((day, dayIndex) => {
     const activities = day.activities;
     const timeConflicts = activityTimeConflicts(day);
+    const dayEnd = timeToMinutes(day.endTime || '21:00');
+    const accommodationIndex = activities.findIndex(activity => activity.type === 'accommodation');
     let previousEnd = timeToMinutes(day.startTime);
+    let latestScheduledEnd = previousEnd;
     const activityHtml = activities.length ? activities.map((activity, index) => {
       const start = activityStartTime(day, index);
       const conflicts = timeConflicts.get(index) || [];
       const isAccommodation = activity.type === 'accommodation';
-      const isTransport = activity.type === 'transport';
+      const isTransport = activity.type === 'transport' || activity.type === 'overnightTransport';
+      const isOvernightTransport = activity.type === 'overnightTransport';
       const isPurchase = activity.type === 'purchase';
       const isWaiting = activity.type === 'waiting';
-      const gap = activity.hasTime ? gapHtml(dayIndex, index, previousEnd, start) : '';
-      if (activity.hasTime) previousEnd = start + Number(activity.duration);
+      const gap = activity.hasTime
+        ? gapHtml(dayIndex, index, previousEnd, start)
+        : index === accommodationIndex && dayEnd > previousEnd ? gapHtml(dayIndex, index, previousEnd, dayEnd) : '';
+      if (activity.hasTime) {
+        previousEnd = start + Number(activity.duration);
+        if (!isOvernightTransport) latestScheduledEnd = Math.max(latestScheduledEnd, previousEnd);
+      }
       const alternativeButtons = activity.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-action="select-activity-alternative" data-alternative-index="${alternativeIndex}">备选：${escapeHtml(alternative.title)}</button>`).join('');
       const routeHtml = isTransport ? `<div class="activity-route"><span>${escapeHtml(activity.fromLocation || '出发地点')}</span><b aria-label="前往">→</b><span>${escapeHtml(activity.toLocation || '到达地点')}</span></div>` : '';
-      const timeHtml = isAccommodation ? '<span class="accommodation-time-label">住宿</span>' : activity.hasTime ? `<span>${formatTime(start)}</span><small>${activity.duration}分钟</small>` : '';
+      const arrivalNextDay = isOvernightTransport && activity.hasTime && start + Number(activity.duration) >= 1440;
+      const timeHtml = isAccommodation ? '<span class="accommodation-time-label">住宿</span><small>未设入住时间</small>' : activity.hasTime ? `<span>${formatTime(start)}</span><small>${activity.duration}分钟${arrivalNextDay ? ` · 次日 ${formatTime(start + Number(activity.duration))} 到达` : ''}</small>` : '';
       const conflictHtml = conflicts.length ? `<div class="time-overlap-warning" role="status">⚠ 时间重叠：${conflicts.map(conflict => `与「${escapeHtml(conflict.title)}」重叠 ${conflict.minutes} 分钟`).join('；')}</div>` : '';
       const movementActions = isAccommodation ? '' : '<button data-action="up">上移</button><button data-action="down">下移</button><button data-action="insert-before">在之前插入行程</button><button data-action="insert-after">在之后插入行程</button>';
       if (isWaiting) {
@@ -613,8 +629,8 @@ function renderTimeline() {
           </div>
         </div>`;
       }
-      return `${gap}<div class="activity${!activity.hasTime ? ' activity-untimed' : ''}${isAccommodation ? ' activity-accommodation' : ''}${isTransport ? ' activity-transport' : ''}${isPurchase ? ' activity-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
-        <div class="activity-card${activity.completed ? ' is-complete' : ''}${!activity.hasTime ? ' is-untimed' : ''}${isAccommodation ? ' is-accommodation' : ''}${isTransport ? ' is-transport' : ''}${isPurchase ? ' is-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="${isAccommodation ? '住宿安排，可拖动到其他天：' : '拖动安排：'}${escapeHtml(activity.title)}"><div class="activity-main"><div><h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
+      return `${gap}<div class="activity${!activity.hasTime ? ' activity-untimed' : ''}${isAccommodation ? ' activity-accommodation' : ''}${isTransport ? ' activity-transport' : ''}${isOvernightTransport ? ' activity-overnight-transport' : ''}${isPurchase ? ' activity-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}"><div class="time">${timeHtml}</div><span class="activity-dot"></span>
+        <div class="activity-card${activity.completed ? ' is-complete' : ''}${!activity.hasTime ? ' is-untimed' : ''}${isAccommodation ? ' is-accommodation' : ''}${isTransport ? ' is-transport' : ''}${isOvernightTransport ? ' is-overnight-transport' : ''}${isPurchase ? ' is-purchase' : ''}${conflicts.length ? ' has-time-overlap' : ''}" draggable="true" data-day="${dayIndex}" data-index="${index}" aria-label="${isAccommodation ? '住宿安排，可拖动到其他天：' : '拖动安排：'}${escapeHtml(activity.title)}"><div class="activity-main"><div><h4>${escapeHtml(activity.title)}</h4>${routeHtml}${activity.detail ? `<p>${escapeHtml(activity.detail)}</p>` : ''}</div></div>
           ${activity.hasCost ? `<div class="activity-meta"><strong>${escapeHtml(activity.category)} ${formatCurrency(activityTotalForTrip(activity, trip), activity.currency)}</strong></div>` : ''}
         <details class="activity-menu"><summary aria-label="更多操作" title="更多操作">⋮</summary><div class="activity-menu-items"><button data-action="toggle-complete" aria-pressed="${activity.completed}">${activity.completed ? '取消完成' : '标记完成'}</button>${movementActions}<button data-action="edit">编辑</button><button data-action="add-alternative">添加备用安排</button><button data-action="delete">删除</button></div></details>
         ${conflictHtml}
@@ -624,9 +640,16 @@ function renderTimeline() {
     date.setDate(date.getDate() + dayDateOffset(day, dayIndex, hasDayZero));
     const dayNumber = day.isDayZero ? 0 : dayIndex + 1 - (hasDayZero ? 1 : 0);
     const dayAlternatives = day.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-day="${dayIndex}" data-alternative-index="${alternativeIndex}" data-action="select-day-alternative">备用：${escapeHtml(alternative.name)}</button>`).join('');
+    const endGap = !day.isDayZero && accommodationIndex < 0 && activities.length && dayEnd > previousEnd
+      ? gapHtml(dayIndex, activities.length, previousEnd, dayEnd)
+      : '';
+    const overtimeMinutes = Math.max(0, latestScheduledEnd - dayEnd);
+    const overtimeHtml = !day.isDayZero && overtimeMinutes >= 10
+      ? `<div class="schedule-overrun" role="status">超出当日结束时间 ${Math.floor(overtimeMinutes / 60)}小时${overtimeMinutes % 60 ? `${overtimeMinutes % 60}分钟` : ''}</div>`
+      : '';
     return `<section class="day-column" data-day="${dayIndex}">
-      <div class="day-column-header"><div class="day-heading"><div class="day-heading-meta"><span class="day-label">DAY ${dayNumber}</span><small>${formatDate(date)}</small></div><div class="day-heading-line"><h3>${escapeHtml(day.title)}</h3><button class="day-title-edit" type="button" data-edit-day-title="${dayIndex}" aria-label="修改 DAY ${dayNumber} 标题" title="修改标题">✎</button></div><div class="day-title-editor" data-day-title-editor="${dayIndex}" hidden><input type="text" maxlength="60" aria-label="每日标题"><button type="button" data-save-day-title="${dayIndex}">保存</button><button type="button" data-cancel-day-title="${dayIndex}">取消</button></div></div><div class="day-plan-actions"><label class="day-start">开始 <input data-day-start="${dayIndex}" type="time" value="${day.startTime}"></label><button class="plan-button" data-day="${dayIndex}" data-action="add-day-alternative">＋ 备用整日</button>${dayAlternatives}</div></div>
-      <div class="timeline">${activityHtml}<button class="day-add-button" data-action="add-day-activity" data-day="${dayIndex}">＋ 添加安排</button></div>
+      <div class="day-column-header"><div class="day-heading"><div class="day-heading-meta"><span class="day-label">DAY ${dayNumber}</span><small>${formatDate(date)}</small></div><div class="day-heading-line"><h3>${escapeHtml(day.title)}</h3><button class="day-title-edit" type="button" data-edit-day-title="${dayIndex}" aria-label="修改 DAY ${dayNumber} 标题" title="修改标题">✎</button></div><div class="day-title-editor" data-day-title-editor="${dayIndex}" hidden><input type="text" maxlength="60" aria-label="每日标题"><button type="button" data-save-day-title="${dayIndex}">保存</button><button type="button" data-cancel-day-title="${dayIndex}">取消</button></div></div><div class="day-plan-actions"><label class="day-start">开始 <input data-day-start="${dayIndex}" type="time" value="${day.startTime}"></label><label class="day-start">结束 <input data-day-end="${dayIndex}" type="time" value="${day.endTime || '21:00'}"></label><button class="plan-button" data-day="${dayIndex}" data-action="add-day-alternative">＋ 备用整日</button>${dayAlternatives}</div></div>
+      <div class="timeline">${activityHtml}${endGap}${overtimeHtml}<div class="day-end-marker"><span>当日结束</span><time>${formatTime(dayEnd)}</time></div><button class="day-add-button" data-action="add-day-activity" data-day="${dayIndex}">＋ 添加安排</button></div>
     </section>`;
   }).join('');
   updateTripProgress();
@@ -780,12 +803,40 @@ function renderTimeline() {
   });
   daysBoard.querySelectorAll('[data-day-start]').forEach(input => input.addEventListener('change', event => {
     const dayIndex = Number(event.target.dataset.dayStart);
-    trip.days[dayIndex].startTime = event.target.value || '09:00';
+    const day = trip.days[dayIndex];
+    const startTime = event.target.value || '09:00';
+    if (timeToMinutes(startTime) >= timeToMinutes(day.endTime || '21:00')) {
+      event.target.value = day.startTime;
+      showToast('开始时间需早于结束时间');
+      return;
+    }
+    day.startTime = startTime;
     persist(); renderTimeline(); showToast('开始时间已更新，全天行程自动顺延');
   }));
   daysBoard.querySelectorAll('[data-day-start]').forEach(input => input.addEventListener('input', event => {
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(event.target.value)) return;
-    trip.days[Number(event.target.dataset.dayStart)].startTime = event.target.value;
+    const day = trip.days[Number(event.target.dataset.dayStart)];
+    if (timeToMinutes(event.target.value) >= timeToMinutes(day.endTime || '21:00')) return;
+    day.startTime = event.target.value;
+    persist();
+  }));
+  daysBoard.querySelectorAll('[data-day-end]').forEach(input => input.addEventListener('change', event => {
+    const dayIndex = Number(event.target.dataset.dayEnd);
+    const day = trip.days[dayIndex];
+    const endTime = event.target.value;
+    if (!endTime || timeToMinutes(endTime) <= timeToMinutes(day.startTime)) {
+      event.target.value = day.endTime || '21:00';
+      showToast('结束时间需晚于开始时间');
+      return;
+    }
+    day.endTime = endTime;
+    persist(); renderTimeline(); showToast('当日结束时间已更新');
+  }));
+  daysBoard.querySelectorAll('[data-day-end]').forEach(input => input.addEventListener('input', event => {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(event.target.value)) return;
+    const day = trip.days[Number(event.target.dataset.dayEnd)];
+    if (timeToMinutes(event.target.value) <= timeToMinutes(day.startTime)) return;
+    day.endTime = event.target.value;
     persist();
   }));
 }
@@ -869,10 +920,12 @@ function setActivityCostEnabled(enabled) {
 }
 function syncActivityTypeFields() {
   const type = $('#activityType').value;
-  const isTransport = type === 'transport';
+  const isTransport = type === 'transport' || type === 'overnightTransport';
   $('#transportLocationFields').hidden = !isTransport;
   $('#transportFrom').required = isTransport;
   $('#transportTo').required = isTransport;
+  $('#activityEndTimeLabel').textContent = type === 'overnightTransport' ? '到达时间' : '结束时间';
+  $('#overnightTimeHint').hidden = type !== 'overnightTransport';
 }
 function openEditor(index = -1) {
   editingIndex = index;
@@ -919,7 +972,7 @@ document.addEventListener('wheel', event => {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }, { passive: false });
 $('#activityType').addEventListener('change', event => {
-  const defaultCategory = { accommodation: '住宿费', transport: '交通费', purchase: '旅行物品' }[event.target.value];
+  const defaultCategory = { accommodation: '住宿费', transport: '交通费', overnightTransport: '交通费', purchase: '旅行物品' }[event.target.value];
   if (defaultCategory) renderCategoryOptions(defaultCategory);
   if (event.target.value === 'waiting') {
     setActivityTimeEnabled(true);
@@ -941,15 +994,20 @@ form.addEventListener('submit', event => {
   const type = $('#activityType').value;
   const hasTime = $('#toggleActivityTime').classList.contains('is-active');
   const hasCost = $('#toggleActivityCost').classList.contains('is-active');
-  const duration = hasTime ? Number($('#activityDuration').value) : 0;
+  let duration = hasTime ? Number($('#activityDuration').value) : 0;
   if (hasTime && (!Number.isInteger(duration) || duration < 10 || duration > 720)) return showToast('时长需为 10 - 720 分钟的整数');
   const startTime = hasTime ? $('#activityStartTime').value : '';
   const endTime = $('#activityEndTime').value;
-  if (hasTime && (!startTime || !endTime || timeToMinutes(endTime) <= timeToMinutes(startTime))) return showToast('结束时间需晚于开始时间，暂不支持跨天安排');
-  if (hasTime && timeToMinutes(endTime) - timeToMinutes(startTime) !== duration) return showToast('请修改结束时间或时长，使两者保持一致');
+  if (hasTime && (!startTime || !endTime)) return showToast('请填写开始和结束时间');
+  if (hasTime) {
+    let elapsedMinutes = timeToMinutes(endTime) - timeToMinutes(startTime);
+    if (type === 'overnightTransport' && elapsedMinutes <= 0) elapsedMinutes += 1440;
+    if (type !== 'overnightTransport' && elapsedMinutes <= 0) return showToast('结束时间需晚于开始时间，普通安排暂不支持跨天');
+    if (elapsedMinutes !== duration) return showToast('请修改到达时间或时长，使两者保持一致');
+  }
   const fromLocation = $('#transportFrom').value.trim();
   const toLocation = $('#transportTo').value.trim();
-  if (type === 'transport' && (!fromLocation || !toLocation)) return showToast('请填写交通行程的出发地点和到达地点');
+  if ((type === 'transport' || type === 'overnightTransport') && (!fromLocation || !toLocation)) return showToast('请填写交通行程的出发地点和到达地点');
   const activity = normalizeActivity({
     type, fromLocation, toLocation, title: $('#activityName').value.trim(), detail: $('#activityDetail').value.trim(), hasTime, hasCost,
     ...(hasTime ? { duration, time: startTime, timeLocked: Boolean(startTime) } : {}),
@@ -1063,15 +1121,17 @@ function exportExcel() {
     const weekday = date.getUTCDay() || 7;
     const firstRow = rows.length + 2;
     day.activities.forEach((activity, index) => {
-      const start = activity.hasTime ? formatTime(activityStartTime(day, index)) : '';
+      const startMinutes = activity.hasTime ? activityStartTime(day, index) : 0;
+      const start = activity.hasTime ? formatTime(startMinutes) : '';
       const end = activity.hasTime ? endTimeFor(start, activity.duration) : '';
+      const timeLabel = activity.type === 'overnightTransport' && startMinutes + Number(activity.duration) >= 1440 ? `${start}-次日${end}` : `${start}-${end}`;
       const expenseType = expenseCategory(activity.category);
       const people = activity.hasCost && activity.costMode === 'perPerson'
         ? (expenseType ? trip.familyMembers.reduce((sum, member) => sum + member.weights[expenseType], 0) : trip.members)
         : (activity.hasCost ? 1 : '');
       rows.push([
-        dateLabel, weekday, activity.hasTime ? `${start}-${end}` : '未记录时间',
-        [activity.title, activity.type === 'transport' ? `${activity.fromLocation} → ${activity.toLocation}` : '', activity.detail].filter(Boolean).join(' · '),
+        dateLabel, weekday, activity.hasTime ? timeLabel : '未记录时间',
+        [activity.title, ['transport', 'overnightTransport'].includes(activity.type) ? `${activity.fromLocation} → ${activity.toLocation}` : '', activity.detail].filter(Boolean).join(' · '),
         activity.hasCost ? (projectNames[activity.category] || activity.category) : '',
         activity.hasCost ? Number(activity.cost || 0) : '', people, activity.hasCost ? activityTotalForTrip(activity, trip) : ''
       ]);
