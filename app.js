@@ -291,6 +291,7 @@ function convertFromCny(amount, currency, trip) {
   return amount / trip.exchangeRates[currency];
 }
 function activityTotalCny(activity, trip) {
+  if (!activity.hasCost) return 0;
   return activityTotalForTrip(activity, trip) * trip.exchangeRates[activity.currency];
 }
 function formatCurrency(amount, currency) {
