@@ -1,0 +1,83 @@
+{
+  "format": "FamilyTrip",
+  "schemaVersion": 10,
+  "trip": {
+    "name": "活动类型示例行程",
+    "destination": "日本北海道",
+    "startDate": "2026-12-18",
+    "endDate": "2026-12-19",
+    "members": 4,
+    "days": [
+      {
+        "title": "出发与夜间交通",
+        "startTime": "08:00",
+        "activities": [
+          {
+            "time": "08:00",
+            "title": "前往新千岁机场",
+            "detail": "机场巴士 · 预留值机时间",
+            "cost": 2400,
+            "duration": 90,
+            "category": "交通费",
+            "type": "transport",
+            "fromLocation": "札幌站",
+            "toLocation": "新千岁机场",
+            "timeLocked": true
+          },
+          {
+            "time": "10:00",
+            "title": "机场候机",
+            "detail": "办理登机手续并在候机区休息",
+            "cost": 0,
+            "duration": 60,
+            "category": "其他",
+            "type": "waiting",
+            "timeLocked": true
+          },
+          {
+            "title": "购买滑雪用品",
+            "detail": "补充手套与暖宝宝",
+            "cost": 1800,
+            "category": "旅行物品",
+            "type": "purchase"
+          },
+          {
+            "time": "22:00",
+            "title": "夜间列车前往札幌",
+            "detail": "卧铺列车 · 次日清晨抵达",
+            "cost": 3200,
+            "duration": 480,
+            "category": "交通费",
+            "type": "overnightTransport",
+            "fromLocation": "新千岁机场",
+            "toLocation": "札幌站",
+            "timeLocked": true
+          }
+        ]
+      },
+      {
+        "title": "抵达与入住",
+        "startTime": "07:00",
+        "activities": [
+          {
+            "time": "07:00",
+            "title": "札幌站早餐",
+            "detail": "用餐后前往酒店寄存行李",
+            "cost": 1600,
+            "duration": 60,
+            "category": "餐饮费",
+            "type": "activity",
+            "timeLocked": true
+          },
+          {
+            "title": "入住札幌站家庭酒店",
+            "detail": "家庭房 · 确认滑雪装备寄存服务",
+            "cost": 8600,
+            "category": "住宿费",
+            "type": "accommodation"
+          }
+        ]
+      }
+    ]
+  }
+}
