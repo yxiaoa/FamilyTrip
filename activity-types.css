@@ -384,15 +384,6 @@
     border-radius: 4px;
   }
 
-  .day-column .activity-untimed {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .day-column .activity-untimed .time,
-  .day-column .activity-untimed .activity-dot {
-    display: none;
-  }
-
   .day-column .activity-main > div {
     padding: 0;
   }
