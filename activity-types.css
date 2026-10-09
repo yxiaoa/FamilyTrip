@@ -130,6 +130,10 @@
   color: #79a9bf;
 }
 
+.timeline:before {
+  display: none;
+}
+
 .activity-card.is-transport .activity-main > div {
   min-width: 0;
 }
