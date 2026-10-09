@@ -604,6 +604,7 @@ function renderTimeline() {
       const start = activityStartTime(day, index);
       const conflicts = timeConflicts.get(index) || [];
       const isAccommodation = activity.type === 'accommodation';
+      const isLastAccommodation = isAccommodation && index === activities.length - 1;
       const isTransport = activity.type === 'transport' || activity.type === 'overnightTransport';
       const isOvernightTransport = activity.type === 'overnightTransport';
       const isPurchase = activity.type === 'purchase';
@@ -618,7 +619,7 @@ function renderTimeline() {
       const alternativeButtons = activity.alternatives.map((alternative, alternativeIndex) => `<button class="alternative-chip" data-action="select-activity-alternative" data-alternative-index="${alternativeIndex}">备选：${escapeHtml(alternative.title)}</button>`).join('');
       const routeHtml = isTransport ? `<div class="activity-route"><span>${escapeHtml(activity.fromLocation || '出发地点')}</span><b aria-label="前往">→</b><span>${escapeHtml(activity.toLocation || '到达地点')}</span></div>` : '';
       const arrivalNextDay = isOvernightTransport && activity.hasTime && start + Number(activity.duration) >= 1440;
-      const timeHtml = isAccommodation ? '<span class="accommodation-time-label">住宿</span><small>未设入住时间</small>' : activity.hasTime ? `<span>${formatTime(start)}</span><small>${activity.duration}分钟${arrivalNextDay ? ` · 次日 ${formatTime(start + Number(activity.duration))} 到达` : ''}</small>` : '';
+      const timeHtml = isAccommodation ? `<span class="accommodation-time-label">${isLastAccommodation ? '入住' : '住宿'}</span>${isLastAccommodation ? `<small>${formatTime(dayEnd)}</small>` : ''}` : activity.hasTime ? `<span>${formatTime(start)}</span><small>${activity.duration}分钟${arrivalNextDay ? ` · 次日 ${formatTime(start + Number(activity.duration))} 到达` : ''}</small>` : '';
       const conflictHtml = conflicts.length ? `<div class="time-overlap-warning" role="status">⚠ 时间重叠：${conflicts.map(conflict => `与「${escapeHtml(conflict.title)}」重叠 ${conflict.minutes} 分钟`).join('；')}</div>` : '';
       const movementActions = isAccommodation ? '' : '<button data-action="up">上移</button><button data-action="down">下移</button><button data-action="insert-before">在之前插入行程</button><button data-action="insert-after">在之后插入行程</button>';
       if (isWaiting) {
@@ -1124,13 +1125,14 @@ function exportExcel() {
       const startMinutes = activity.hasTime ? activityStartTime(day, index) : 0;
       const start = activity.hasTime ? formatTime(startMinutes) : '';
       const end = activity.hasTime ? endTimeFor(start, activity.duration) : '';
-      const timeLabel = activity.type === 'overnightTransport' && startMinutes + Number(activity.duration) >= 1440 ? `${start}-次日${end}` : `${start}-${end}`;
+      const isLastAccommodation = activity.type === 'accommodation' && index === day.activities.length - 1;
+      const timeLabel = isLastAccommodation ? `入住 ${day.endTime || '21:00'}` : activity.type === 'overnightTransport' && startMinutes + Number(activity.duration) >= 1440 ? `${start}-次日${end}` : `${start}-${end}`;
       const expenseType = expenseCategory(activity.category);
       const people = activity.hasCost && activity.costMode === 'perPerson'
         ? (expenseType ? trip.familyMembers.reduce((sum, member) => sum + member.weights[expenseType], 0) : trip.members)
         : (activity.hasCost ? 1 : '');
       rows.push([
-        dateLabel, weekday, activity.hasTime ? timeLabel : '未记录时间',
+        dateLabel, weekday, activity.hasTime || isLastAccommodation ? timeLabel : '未记录时间',
         [activity.title, ['transport', 'overnightTransport'].includes(activity.type) ? `${activity.fromLocation} → ${activity.toLocation}` : '', activity.detail].filter(Boolean).join(' · '),
         activity.hasCost ? (projectNames[activity.category] || activity.category) : '',
         activity.hasCost ? Number(activity.cost || 0) : '', people, activity.hasCost ? activityTotalForTrip(activity, trip) : ''
