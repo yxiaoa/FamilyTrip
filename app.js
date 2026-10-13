@@ -14,7 +14,7 @@ const seedDays = [
 ];
 const stateKey = 'familyTripPlanner';
 const CURRENT_SCHEMA_VERSION = 10;
-const builtInCategories = ['交通费', '机票', '住宿费', '旅行物品', '餐饮费', '门票', '其他'];
+const builtInCategories = ['交通费', '机票', '住宿费', '旅行物品', '购物', '餐饮费', '门票', '其他'];
 const supportedCurrencies = ['CNY', 'JPY', 'USD', 'HKD', 'MOP', 'EUR'];
 const defaultExchangeRates = { CNY: 1, JPY: 0.05, USD: 7.2, HKD: 0.92, MOP: 0.9, EUR: 7.8 };
 const builtInCurrencyNames = { CNY: '人民币', JPY: '日元', USD: '美元', HKD: '港币', MOP: '澳门币', EUR: '欧元' };
