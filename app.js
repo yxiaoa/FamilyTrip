@@ -487,7 +487,7 @@ function syncActivityDuration() {
   if (!startTime || !endTime) return;
   let duration = timeToMinutes(endTime) - timeToMinutes(startTime);
   if ($('#activityType').value === 'overnightTransport' && duration < 0) duration += 1440;
-  if (duration >= 10 && duration <= 720) $('#activityDuration').value = duration;
+  if (duration >= 10) $('#activityDuration').value = duration;
 }
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
@@ -552,7 +552,7 @@ function activityTimeConflicts(day) {
 function gapHtml(dayIndex, insertIndex, start, end) {
   const duration = end - start;
   if (duration < 10) return '';
-  return `<div class="schedule-gap"><span>未安排 · ${formatTime(start)}–${formatTime(end)} · ${Math.floor(duration / 60)}小时${duration % 60 ? `${duration % 60}分钟` : ''}</span><button class="gap-add" data-action="insert-activity" data-day="${dayIndex}" data-insert-index="${insertIndex}" data-insert-time="${formatTime(start)}" data-insert-duration="${Math.min(duration, 720)}">＋ 插入安排</button></div>`;
+  return `<div class="schedule-gap"><span>未安排 · ${formatTime(start)}–${formatTime(end)} · ${Math.floor(duration / 60)}小时${duration % 60 ? `${duration % 60}分钟` : ''}</span><button class="gap-add" data-action="insert-activity" data-day="${dayIndex}" data-insert-index="${insertIndex}" data-insert-time="${formatTime(start)}" data-insert-duration="${duration}">＋ 插入安排</button></div>`;
 }
 function updateTripProgress() {
   const trip = currentTrip();
@@ -802,44 +802,80 @@ function renderTimeline() {
       draggedActivity = null;
     });
   });
-  daysBoard.querySelectorAll('[data-day-start]').forEach(input => input.addEventListener('change', event => {
-    const dayIndex = Number(event.target.dataset.dayStart);
+  const restoreFocusAfterTimelineRender = relatedTarget => {
+    if (!relatedTarget) return;
+    if (relatedTarget.dataset?.dayEnd !== undefined) {
+      daysBoard.querySelector(`[data-day-end="${relatedTarget.dataset.dayEnd}"]`)?.focus();
+    } else if (relatedTarget.dataset?.dayStart !== undefined) {
+      daysBoard.querySelector(`[data-day-start="${relatedTarget.dataset.dayStart}"]`)?.focus();
+    }
+  };
+  const commitDayStartTime = (input, relatedTarget) => {
+    const dayIndex = Number(input.dataset.dayStart);
     const day = trip.days[dayIndex];
-    const startTime = event.target.value || '09:00';
-    if (timeToMinutes(startTime) >= timeToMinutes(day.endTime || '21:00')) {
-      event.target.value = day.startTime;
+    if (!day) return;
+    const startTime = input.value;
+    if (!startTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime) || timeToMinutes(startTime) >= timeToMinutes(day.endTime || '21:00')) {
+      input.value = day.startTime;
       showToast('开始时间需早于结束时间');
       return;
     }
+    if (startTime === day.startTime) return;
     day.startTime = startTime;
-    persist(); renderTimeline(); showToast('开始时间已更新，全天行程自动顺延');
-  }));
-  daysBoard.querySelectorAll('[data-day-start]').forEach(input => input.addEventListener('input', event => {
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(event.target.value)) return;
-    const day = trip.days[Number(event.target.dataset.dayStart)];
-    if (timeToMinutes(event.target.value) >= timeToMinutes(day.endTime || '21:00')) return;
-    day.startTime = event.target.value;
     persist();
-  }));
-  daysBoard.querySelectorAll('[data-day-end]').forEach(input => input.addEventListener('change', event => {
-    const dayIndex = Number(event.target.dataset.dayEnd);
+    renderTimeline();
+    showToast('开始时间已更新，全天行程自动顺延');
+    restoreFocusAfterTimelineRender(relatedTarget);
+  };
+  const commitDayEndTime = (input, relatedTarget) => {
+    const dayIndex = Number(input.dataset.dayEnd);
     const day = trip.days[dayIndex];
-    const endTime = event.target.value;
-    if (!endTime || timeToMinutes(endTime) <= timeToMinutes(day.startTime)) {
-      event.target.value = day.endTime || '21:00';
+    if (!day) return;
+    const endTime = input.value;
+    if (!endTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(endTime) || timeToMinutes(endTime) <= timeToMinutes(day.startTime)) {
+      input.value = day.endTime || '21:00';
       showToast('结束时间需晚于开始时间');
       return;
     }
+    if (endTime === (day.endTime || '21:00')) return;
     day.endTime = endTime;
-    persist(); renderTimeline(); showToast('当日结束时间已更新');
-  }));
-  daysBoard.querySelectorAll('[data-day-end]').forEach(input => input.addEventListener('input', event => {
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(event.target.value)) return;
-    const day = trip.days[Number(event.target.dataset.dayEnd)];
-    if (timeToMinutes(event.target.value) <= timeToMinutes(day.startTime)) return;
-    day.endTime = event.target.value;
     persist();
-  }));
+    renderTimeline();
+    showToast('当日结束时间已更新');
+    restoreFocusAfterTimelineRender(relatedTarget);
+  };
+  daysBoard.querySelectorAll('[data-day-start]').forEach(input => {
+    input.addEventListener('blur', event => {
+      commitDayStartTime(event.target, event.relatedTarget);
+    });
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.target.blur();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        const day = trip.days[Number(event.target.dataset.dayStart)];
+        if (day) event.target.value = day.startTime;
+        event.target.blur();
+      }
+    });
+  });
+  daysBoard.querySelectorAll('[data-day-end]').forEach(input => {
+    input.addEventListener('blur', event => {
+      commitDayEndTime(event.target, event.relatedTarget);
+    });
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.target.blur();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        const day = trip.days[Number(event.target.dataset.dayEnd)];
+        if (day) event.target.value = day.endTime || '21:00';
+        event.target.blur();
+      }
+    });
+  });
 }
 function moveActivity(sourceDayIndex, sourceIndex, targetDayIndex, targetIndex) {
   const trip = currentTrip();
@@ -996,15 +1032,12 @@ form.addEventListener('submit', event => {
   const hasTime = $('#toggleActivityTime').classList.contains('is-active');
   const hasCost = $('#toggleActivityCost').classList.contains('is-active');
   let duration = hasTime ? Number($('#activityDuration').value) : 0;
-  if (hasTime && (!Number.isInteger(duration) || duration < 10 || duration > 720)) return showToast('时长需为 10 - 720 分钟的整数');
+  if (hasTime && (!Number.isInteger(duration) || duration < 10)) return showToast('时长需为 10 分钟以上的整数');
   const startTime = hasTime ? $('#activityStartTime').value : '';
   const endTime = $('#activityEndTime').value;
   if (hasTime && (!startTime || !endTime)) return showToast('请填写开始和结束时间');
   if (hasTime) {
-    let elapsedMinutes = timeToMinutes(endTime) - timeToMinutes(startTime);
-    if (type === 'overnightTransport' && elapsedMinutes <= 0) elapsedMinutes += 1440;
-    if (type !== 'overnightTransport' && elapsedMinutes <= 0) return showToast('结束时间需晚于开始时间，普通安排暂不支持跨天');
-    if (elapsedMinutes !== duration) return showToast('请修改到达时间或时长，使两者保持一致');
+    if (endTimeFor(startTime, duration) !== endTime) return showToast('请修改到达时间或时长，使两者保持一致');
   }
   const fromLocation = $('#transportFrom').value.trim();
   const toLocation = $('#transportTo').value.trim();
