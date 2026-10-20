@@ -14,7 +14,7 @@ const seedDays = [
 ];
 const stateKey = 'familyTripPlanner';
 const CURRENT_SCHEMA_VERSION = 10;
-const builtInCategories = ['交通费', '机票', '住宿费', '旅行物品', '购物', '餐饮费', '门票', '其他'];
+const builtInCategories = ['市内交通', '往返交通', '住宿费', '旅行物品', '购物', '餐饮费', '门票', '其他'];
 const supportedCurrencies = ['CNY', 'JPY', 'USD', 'HKD', 'MOP', 'EUR'];
 const defaultExchangeRates = { CNY: 1, JPY: 0.05, USD: 7.2, HKD: 0.92, MOP: 0.9, EUR: 7.8 };
 const builtInCurrencyNames = { CNY: '人民币', JPY: '日元', USD: '美元', HKD: '港币', MOP: '澳门币', EUR: '欧元' };
@@ -244,7 +244,11 @@ function normalizeActivity(activity, currencies = supportedCurrencies) {
     delete normalized.timeLocked;
   }
   if (hasCost) {
-    normalized.category = activity.category || '其他';
+    normalized.category = activity.category === '交通费'
+      ? '市内交通'
+      : activity.category === '机票'
+        ? '往返交通'
+        : activity.category || '其他';
     normalized.costMode = activity.costMode === 'perPerson' ? 'perPerson' : 'total';
     const cost = Number(activity.cost);
     normalized.cost = Number.isFinite(cost) ? Math.max(0, cost) : 0;
@@ -275,7 +279,7 @@ function activityTotal(activity, members) {
   return Number(activity.cost || 0) * (activity.costMode === 'perPerson' ? members : 1);
 }
 function expenseCategory(category) {
-  if (category === '交通费' || category === '机票') return 'transport';
+  if (category === '市内交通' || category === '往返交通') return 'transport';
   if (category === '门票') return 'ticket';
   if (category === '餐饮费') return 'dining';
   return null;
@@ -523,6 +527,19 @@ function activityStartTime(day, index) {
   const activity = day.activities[index];
   if (!activity?.hasTime) return current;
   return activity?.timeLocked && activity.time ? timeToMinutes(activity.time) : current;
+}
+function shiftOverlappingActivities(day, index) {
+  const activity = day.activities[index];
+  if (!activity?.hasTime) return;
+  let nextStart = activityStartTime(day, index) + Math.max(0, Number(activity.duration) || 0);
+  for (let nextIndex = index + 1; nextIndex < day.activities.length; nextIndex += 1) {
+    const nextActivity = day.activities[nextIndex];
+    if (!nextActivity.hasTime) continue;
+    const start = activityStartTime(day, nextIndex);
+    if (start > nextStart) break;
+    if (start < nextStart && nextActivity.timeLocked) nextActivity.time = formatTime(nextStart);
+    nextStart = Math.max(start, nextStart) + Math.max(0, Number(nextActivity.duration) || 0);
+  }
 }
 function activityTimeConflicts(day) {
   const conflicts = new Map();
@@ -1009,7 +1026,7 @@ document.addEventListener('wheel', event => {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }, { passive: false });
 $('#activityType').addEventListener('change', event => {
-  const defaultCategory = { accommodation: '住宿费', transport: '交通费', overnightTransport: '交通费', purchase: '旅行物品' }[event.target.value];
+  const defaultCategory = { accommodation: '住宿费', transport: '市内交通', overnightTransport: '往返交通', purchase: '旅行物品' }[event.target.value];
   if (defaultCategory) renderCategoryOptions(defaultCategory);
   if (event.target.value === 'waiting') {
     setActivityTimeEnabled(true);
@@ -1049,6 +1066,9 @@ form.addEventListener('submit', event => {
   }, currencyCodes(currentTrip()));
   if (!activity.title) return showToast('请填写安排名称');
   const day = currentTrip().days[selectedDay];
+  const previousStartTime = editingIndex >= 0 && day.activities[editingIndex].hasTime
+    ? activityStartTime(day, editingIndex)
+    : null;
   const suggestedIndex = insertingActivityIndex < 0 ? day.activities.length : insertingActivityIndex;
   const suggestedTime = hasTime ? formatTime(editingIndex >= 0 ? activityStartTime(day, editingIndex) : (newActivityTime ? timeToMinutes(newActivityTime) : activityStartTime(day, suggestedIndex))) : '';
   if (hasTime) activity.timeLocked = addingActivityAlternative || startTime !== suggestedTime || Boolean(newActivityTime);
@@ -1056,6 +1076,9 @@ form.addEventListener('submit', event => {
     currentTrip().days[selectedDay].activities[editingIndex].alternatives.push(activity);
   } else if (editingIndex >= 0) {
     currentTrip().days[selectedDay].activities[editingIndex] = normalizeActivity({ ...currentTrip().days[selectedDay].activities[editingIndex], ...activity }, currencyCodes(currentTrip()));
+    if (hasTime && previousStartTime !== null && timeToMinutes(startTime) > previousStartTime) {
+      shiftOverlappingActivities(day, editingIndex);
+    }
   }
   else {
     if (!activity.timeLocked) delete activity.time;
@@ -1145,7 +1168,7 @@ function exportExcel() {
   const rows = [];
   const dayRanges = [];
   const startDate = new Date(`${trip.startDate}T00:00:00Z`);
-  const projectNames = { '交通费': '车票', '机票': '机票', '住宿费': '住宿', '旅行物品': '旅行物品', '餐饮费': '餐饮', '门票': '门票' };
+  const projectNames = { '市内交通': '市内交通', '往返交通': '往返交通', '住宿费': '住宿', '旅行物品': '旅行物品', '餐饮费': '餐饮', '门票': '门票' };
   const hasDayZero = trip.days[0]?.isDayZero === true;
   trip.days.forEach((day, dayIndex) => {
     if (!day.activities.length) return;

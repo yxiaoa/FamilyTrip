@@ -43,7 +43,7 @@ Use this top-level structure:
 
 The version above is illustrative only: use the version currently declared in `app.js`. Keep dates in `YYYY-MM-DD` form and times in 24-hour `HH:mm` form. The number of day entries should equal the inclusive date span. Include a non-empty day title, a valid `startTime`, and an `activities` array for each day.
 
-Each activity should have a concise `title` and useful `detail`. Include `cost` as a non-negative number and `category` when recording an expense; use `0` for a known free activity and omit cost fields only when cost is intentionally unrecorded. Common categories are `交通费`, `机票`, `住宿费`, `旅行物品`, `餐饮费`, `门票`, and `其他`. Explicitly set `currency` when the amount is not in CNY, and use `costMode: "perPerson"` only when the amount is per traveler; otherwise use `costMode: "total"`.
+Each activity should have a concise `title` and useful `detail`. Include `cost` as a non-negative number and `category` when recording an expense; use `0` for a known free activity and omit cost fields only when cost is intentionally unrecorded. Common categories are `市内交通`, `往返交通`, `住宿费`, `旅行物品`, `购物`, `餐饮费`, `门票`, and `其他`. Use `市内交通` for local transit and `往返交通` for return-trip fares regardless of transport mode (such as plane or train). Explicitly set `currency` when the amount is not in CNY, and use `costMode: "perPerson"` only when the amount is per traveler; otherwise use `costMode: "total"`.
 
 ## Activity types
 
