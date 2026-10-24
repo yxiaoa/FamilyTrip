@@ -925,12 +925,61 @@ function updateCost() {
   const total = expenseTotal(trip);
   const displayCurrency = trip.displayCurrency;
   const displayedTotal = convertFromCny(total, displayCurrency, trip);
-  $('#memberCount').textContent = `${trip.members} 人`;
-  $('#memberHint').textContent = `${Math.max(1, trip.members - 2)} 位成人 · ${Math.min(2, trip.members)} 位儿童`;
+  $('#memberCount').textContent = `${trip.members} 人同行`;
+  const memberRoleCounts = trip.familyMembers.reduce((counts, member) => {
+    counts[member.role] = (counts[member.role] || 0) + 1;
+    return counts;
+  }, {});
+  $('#memberHint').textContent = ['成人', '儿童', '老人']
+    .filter(role => memberRoleCounts[role])
+    .map(role => `${memberRoleCounts[role]} 位${role}`)
+    .join(' · ');
   $('#totalCost').textContent = formatCurrency(displayedTotal, displayCurrency);
   $('#perPerson').textContent = formatCurrency(displayedTotal / trip.members, displayCurrency);
   $('#displayCurrency').value = displayCurrency;
+  renderCategorySummaries(trip, displayCurrency, total);
   renderMembers();
+}
+function formatSummaryDuration(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours ? `${hours}小时` : ''}${remainingMinutes ? `${remainingMinutes}分` : ''}` || '0分';
+}
+function renderCategorySummaries(trip, displayCurrency, totalCostCny) {
+  const expenses = new Map();
+  const durations = new Map();
+  const activityTypeNames = {
+    activity: '普通活动',
+    accommodation: '住宿',
+    transport: '交通',
+    overnightTransport: '卧铺交通',
+    purchase: '物品购买',
+    waiting: '等待'
+  };
+  trip.days.forEach(day => day.activities.forEach(activity => {
+    if (activity.hasCost) {
+      const category = activity.category || '其他';
+      expenses.set(category, (expenses.get(category) || 0) + activityTotalCny(activity, trip));
+    }
+    if (activity.hasTime && Number(activity.duration) > 0) {
+      const category = activityTypeNames[activity.type] || '普通活动';
+      durations.set(category, (durations.get(category) || 0) + Number(activity.duration));
+    }
+  }));
+  const renderRows = (container, entries, total, formatValue) => {
+    const rows = [...entries].filter(([, value]) => value > 0);
+    container.innerHTML = rows.length
+      ? rows.map(([category, value]) => `<div class="summary-stat-row"><div><span>${escapeHtml(category)}</span><strong>${escapeHtml(formatValue(value))}</strong></div></div>`).join('')
+      : '<small class="summary-stat-empty">暂无统计</small>';
+  };
+  renderRows(
+    $('#expenseCategorySummary'),
+    expenses,
+    totalCostCny,
+    amount => formatCurrency(convertFromCny(amount, displayCurrency, trip), displayCurrency)
+  );
+  const totalDuration = [...durations.values()].reduce((sum, value) => sum + value, 0);
+  renderRows($('#timeCategorySummary'), durations, totalDuration, formatSummaryDuration);
 }
 function renderTripHeader() {
   const trip = currentTrip();
