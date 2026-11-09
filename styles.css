@@ -69,3 +69,5 @@
 .activity.has-time-overlap .time{color:#bf493d;font-weight:700}.activity.has-time-overlap .activity-dot{border-color:#c94f43}.activity-card.has-time-overlap{border-color:#e7a097;background:#fff8f6}.time-overlap-warning{flex:0 0 100%;margin-top:9px;padding:7px 9px;border-radius:5px;background:#fff0ed;color:#b54539;font-size:10px;line-height:1.6}
 @page{size:landscape;margin:8mm}
 @media print{.page-heading{padding:0 0 8px}.itinerary-panel{margin:0}.summary-grid{margin-bottom:8px}.activity{padding:3px 0}.print-itinerary-only .summary-grid,.print-itinerary-only .page-heading,.print-itinerary-only .itinerary-panel>.section-heading{display:none!important}}
+.skill-view-button,.skill-download-button{white-space:nowrap}
+@media(max-width:560px){.skill-view-button{order:-3}.skill-download-button{order:-2}}
