@@ -25,6 +25,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Copy public Skill file
+        run: cp .github/skills/create-family-trip-json/SKILL.md create-family-trip-json.SKILL.md
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
