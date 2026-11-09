@@ -56,7 +56,7 @@ Use the app's supported `type` values:
 - `purchase`: an untimed shopping or supplies item.
 - `accommodation`: lodging/check-in; place it last in that day's activities because the app moves accommodation entries to the end.
 
-For timed activities, include `time` in `HH:mm`, positive `duration` in minutes, and normally `timeLocked: true` when the stated start time is intentional. For untimed `purchase` and `accommodation` entries, omit `time` and `duration`. Avoid setting internal UI-derived fields such as `hasTime`, `completed`, or `id` unless editing an existing file requires preserving them.
+For timed activities, include `time` in `HH:mm`, positive `duration` in minutes, and normally `timeLocked: true` when the stated start time is intentional. Set `timeFixed: true` only for confirmed fixed-time commitments that must not move when earlier activities are delayed; `timeLocked` alone does not prevent automatic postponement. For untimed `purchase` and `accommodation` entries, omit `time`, `duration`, and `timeFixed`. Avoid setting internal UI-derived fields such as `hasTime`, `completed`, or `id` unless editing an existing file requires preserving them.
 
 ## Final checks
 
