@@ -42,6 +42,7 @@ const legacyTrip = storedState?.days?.length
 const state = storedState?.trips?.length
   ? { trips: storedState.trips, activeTripId: storedState.activeTripId || storedState.trips[0].id }
   : { trips: [legacyTrip || { id: 'trip-default', name: '京都慢游 · 春日家庭行', destination: '日本京都', startDate: '2026-04-03', endDate: '2026-04-07', members: 4, days: seedDays }], activeTripId: legacyTrip?.id || 'trip-default' };
+const dirtyTripIds = new Set(Array.isArray(storedState?.dirtyTripIds) ? storedState.dirtyTripIds : []);
 let selectedDay = 0;
 let editingIndex = -1;
 let editingAlternativeIndex = -1;
@@ -69,7 +70,14 @@ const categoryForm = document.querySelector('#categoryForm');
 const printDialog = document.querySelector('#printDialog');
 const $ = selector => document.querySelector(selector);
 
-function persist() { localStorage.setItem(stateKey, JSON.stringify({ ...state, storageSchemaVersion: CURRENT_SCHEMA_VERSION })); }
+function persist(markFileDirty = true) {
+  if (markFileDirty) dirtyTripIds.add(currentTrip().id);
+  localStorage.setItem(stateKey, JSON.stringify({ ...state, dirtyTripIds: [...dirtyTripIds], storageSchemaVersion: CURRENT_SCHEMA_VERSION }));
+}
+function markTripFileSaved(tripId) {
+  dirtyTripIds.delete(tripId);
+  persist(false);
+}
 function supportsFileHandles() {
   return 'showOpenFilePicker' in window && 'showSaveFilePicker' in window && 'indexedDB' in window;
 }
@@ -1295,6 +1303,7 @@ async function saveTripFile() {
       const writable = await handle.createWritable();
       await writable.write(JSON.stringify(fileData, null, 2));
       await writable.close();
+      markTripFileSaved(trip.id);
       showToast(`行程已保存到 ${handle.name}`);
       return;
     }
@@ -1303,6 +1312,7 @@ async function saveTripFile() {
     console.error('保存行程文件失败', error);
     if (error.name === 'SecurityError' || error.name === 'NotSupportedError') {
       downloadTripFile(fileData, trip);
+      markTripFileSaved(trip.id);
       showToast('当前环境不能写回原文件，已下载行程文件');
       return;
     }
@@ -1310,6 +1320,7 @@ async function saveTripFile() {
     return;
   }
   downloadTripFile(fileData, trip);
+  markTripFileSaved(trip.id);
   showToast('当前浏览器不支持原文件保存，已下载行程文件');
 }
 async function importTripFile(file) {
@@ -1319,7 +1330,7 @@ async function importTripFile(file) {
   state.trips.push(trip);
   state.activeTripId = trip.id;
   selectedDay = 0;
-  persist();
+  persist(false);
   renderApp();
   return migration;
 }
@@ -1354,6 +1365,11 @@ document.querySelector('#confirmPrint').addEventListener('click', () => {
   window.print();
 });
 window.addEventListener('afterprint', () => document.body.classList.remove('print-itinerary-only'));
+window.addEventListener('beforeunload', event => {
+  if (!dirtyTripIds.size) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
 document.querySelector('#exportExcel').addEventListener('click', exportExcel);
 document.querySelector('#saveTripFile').addEventListener('click', saveTripFile);
 document.querySelector('#openTripFile').addEventListener('click', () => {
@@ -1640,7 +1656,7 @@ editTripForm.addEventListener('submit', event => {
   showToast('行程名称和天数已更新');
 });
 state.trips = state.trips.map(normalizeTrip);
-persist();
+persist(false);
 tripDialog.addEventListener('cancel', event => { event.preventDefault(); tripDialog.close(); });
 dialog.addEventListener('cancel', event => { event.preventDefault(); addingActivityAlternative = false; insertingActivityIndex = -1; insertingAroundActivity = false; newActivityTime = ''; newActivityDuration = 0; dialog.close(); });
 membersDialog.addEventListener('cancel', event => { event.preventDefault(); membersDialog.close(); });
